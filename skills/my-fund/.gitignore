@@ -1,0 +1,6 @@
+.env
+output/
+*.html
+*.json
+__pycache__/
+*.pyc

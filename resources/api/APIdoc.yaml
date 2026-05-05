@@ -1,0 +1,345 @@
+openapi: 3.1.0
+info:
+  title: myFund.pl API
+  version: v1
+  description: |
+    API REST do odczytu danych portfela inwestycyjnego z [myFund.pl](https://myfund.pl).
+
+    ## Uwierzytelnianie
+
+    Każde żądanie wymaga klucza API przekazanego jako parametr zapytania.
+    Klucz generujesz lub regenerujesz w **Menu > Konto > Ustawienia konta > Klucz API**.
+    Wygenerowanie nowego klucza natychmiast unieważnia poprzedni.
+
+    ## Limity i cache
+
+    Odpowiedzi są cache'owane przez **5 minut**. Identyczne żądania w tym oknie
+    zwracają te same dane niezależnie od zmian w portfelu.
+
+    ## Uwagi dot. typów
+
+    API zwraca wiele wartości liczbowych jako stringi (czasem z prefiksem `+`
+    dla dodatnich stóp zwrotu). Konsumenci powinni parsować je defensywnie.
+
+    ## Status
+
+    API jest obecnie w fazie **beta**. Dostęp może być ograniczony do wybranych użytkowników.
+  contact:
+    name: myFund.pl
+    url: https://myfund.pl
+
+servers:
+  - url: https://myfund.pl/API/v1
+    description: Produkcja
+
+security:
+  - apiKeyQuery: []
+
+paths:
+  /getPortfel.php:
+    get:
+      operationId: getPortfolio
+      summary: Pobierz dane portfela
+      description: |
+        Zwraca kompletne dane portfela: skład, alokacje i szeregi czasowe.
+        Odpowiedź odpowiada widokowi składu portfela na dashboardzie myFund.pl.
+      parameters:
+        - name: portfel
+          in: query
+          required: true
+          description: Nazwa portfela wyświetlana na koncie użytkownika.
+          schema:
+            type: string
+          example: "Mój Portfel"
+        - name: apiKey
+          in: query
+          required: true
+          description: Klucz API wygenerowany w ustawieniach konta.
+          schema:
+            type: string
+          example: "abc123def456"
+        - name: format
+          in: query
+          required: true
+          description: Format odpowiedzi. Obecnie obsługiwany jest tylko `json`.
+          schema:
+            type: string
+            enum: [json]
+      responses:
+        "200":
+          description: Dane portfela zwrócone pomyślnie (sprawdź `status.code` pod kątem błędów logicznych).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioResponse"
+
+components:
+  securitySchemes:
+    apiKeyQuery:
+      type: apiKey
+      in: query
+      name: apiKey
+      description: Klucz API wygenerowany w ustawieniach konta.
+
+  schemas:
+    PortfolioResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/Status"
+        portfel:
+          $ref: "#/components/schemas/PortfolioSummary"
+        tickers:
+          type: object
+          description: |
+            Poszczególne pozycje portfela, kluczowane wewnętrznym ID numerycznym (jako string).
+            Przykład: `{"7": {Ticker}, "1": {Ticker}, ...}`.
+          additionalProperties:
+            $ref: "#/components/schemas/Ticker"
+        struktura:
+          type: object
+          description: |
+            Podział alokacji wg typu aktywów. Klucze to nazwy kategorii
+            (np. `"ETFs - international"`), wartości to kwoty zakodowane jako stringi.
+          additionalProperties:
+            type: string
+        strukturaKolor:
+          type: object
+          description: |
+            Mapa kolorów dla kategorii `struktura`.
+            Klucze odpowiadają kluczom `struktura`, wartości to kolory w formacie hex.
+          additionalProperties:
+            type: string
+        strukturaWalory:
+          type: object
+          description: |
+            Alokacja per walor. Klucze to nazwy wyświetlane walorów,
+            wartości to udziały procentowe (integer lub float).
+          additionalProperties:
+            type: [integer, number, string]
+        strukturaWaloryKolor:
+          type: object
+          description: |
+            Mapa kolorów dla pozycji `strukturaWalory`.
+            Klucze odpowiadają kluczom `strukturaWalory`, wartości to kolory hex.
+          additionalProperties:
+            type: string
+        zyskWCzasie:
+          $ref: "#/components/schemas/TimeSeriesMap"
+          description: Dzienny zysk/strata portfela w czasie.
+        wartoscWCzasie:
+          $ref: "#/components/schemas/TimeSeriesMap"
+          description: Dzienna wartość całkowita portfela w czasie.
+        wkladWCzasie:
+          $ref: "#/components/schemas/TimeSeriesMap"
+          description: Dzienny wkład własny w czasie.
+        benchWCzasie:
+          $ref: "#/components/schemas/TimeSeriesMap"
+          description: Stopa zwrotu benchmarku w czasie.
+        stopaZwrotuWCzasie:
+          $ref: "#/components/schemas/TimeSeriesMap"
+          description: Stopa zwrotu portfela w czasie.
+        zmianaDzienna:
+          $ref: "#/components/schemas/TimeSeriesMap"
+          description: Dzienne zmiany wartości portfela.
+
+    Status:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: |
+            Kod wyniku (zwracany jako string).
+            - `"0"` — sukces
+            - `"1"` — błąd (szczegóły w `text`)
+            - `"7"` — portfel nie znaleziony
+          enum: ["0", "1", "7"]
+        text:
+          type: string
+          description: Komunikat tekstowy (obecny zarówno przy sukcesie, jak i błędzie).
+
+    PortfolioSummary:
+      type: object
+      description: |
+        Zagregowane metryki portfela. Odpowiada wierszowi „Cały portfel"
+        w tabeli składu portfela na dashboardzie.
+
+        **Uwaga dot. typów:** Większość pól liczbowych to natywne JSON numbers,
+        ale `wartosc` i wszystkie pola stóp zwrotu za okresy (`zmianaW` … `zmianaRdD`)
+        to stringi (stopy zwrotu mogą mieć prefiks `+`).
+      properties:
+        benchName:
+          type: string
+          description: Nazwa przypisanego benchmarku.
+        tickersCount:
+          type: integer
+          description: Liczba pozycji w portfelu.
+        tickerClear:
+          type: string
+          description: Oczyszczony symbol tickera.
+        nazwa:
+          type: string
+          description: Nazwa wyświetlana portfela.
+        waluta:
+          type: string
+          description: Waluta bazowa portfela (np. `PLN`, `USD`).
+        data:
+          type: string
+          description: Data ostatniego punktu danych (YYYY-MM-DD lub `&nbsp;` jeśli niedostępna).
+        close:
+          type: number
+          description: Ostatnia cena zamknięcia jednostki.
+        zmianaDzienna:
+          type: number
+          description: Zmiana dzienna (bezwzględna lub procentowa).
+        liczbaJednostek:
+          type: number
+          description: Liczba posiadanych jednostek.
+        typ:
+          type: string
+          description: Etykieta typu aktywów (np. `Akcje`, `ETF`, `Obligacje`).
+        typOrg:
+          type: string
+          description: Oryginalna (surowa) wartość typu aktywów.
+        wartosc:
+          type: string
+          description: Aktualna wartość całkowita w walucie portfela (liczba zakodowana jako string).
+        udzial:
+          type: [integer, number]
+          description: Udział procentowy w całkowitej wartości portfela.
+        zmiana:
+          type: number
+          description: Całkowita stopa zwrotu (%) od zakupu.
+        zysk:
+          type: number
+          description: Całkowity zysk/strata w walucie portfela.
+        kontoInvName:
+          type: string
+          description: Nazwa konta inwestycyjnego (np. IKE, IKZE, nazwa brokera).
+        sektor:
+          type: string
+          description: Klasyfikacja sektorowa.
+        zyskDzienny:
+          type: number
+          description: Dzienny zysk/strata w walucie portfela.
+        grupowanieKonto:
+          type: string
+          description: Klucz grupowania — wg konta inwestycyjnego.
+        grupowanieSektor:
+          type: string
+          description: Klucz grupowania — wg sektora.
+        grupowanieWalor:
+          type: string
+          description: Klucz grupowania — wg waloru.
+        grupowanieRyzyko:
+          type: string
+          description: Klucz grupowania — wg poziomu ryzyka.
+        grupowaniePortfel:
+          type: string
+          description: Klucz grupowania — wg portfela.
+        zmianaW:
+          type: string
+          description: Stopa zwrotu za ostatni 1 tydzień (%). String, może mieć prefiks `+`.
+        zmiana2W:
+          type: string
+          description: Stopa zwrotu za ostatnie 2 tygodnie (%). String, może mieć prefiks `+`.
+        zmianaM:
+          type: string
+          description: Stopa zwrotu za ostatni 1 miesiąc (%). String, może mieć prefiks `+`.
+        zmiana3M:
+          type: string
+          description: Stopa zwrotu za ostatnie 3 miesiące (%). String, może mieć prefiks `+`.
+        zmiana6M:
+          type: string
+          description: Stopa zwrotu za ostatnie 6 miesięcy (%). String, może mieć prefiks `+`.
+        zmianaR:
+          type: string
+          description: Stopa zwrotu za ostatni 1 rok (%). String, może mieć prefiks `+`.
+        zmiana3R:
+          type: string
+          description: Stopa zwrotu za ostatnie 3 lata (%). String, może mieć prefiks `+`.
+        zmiana5R:
+          type: string
+          description: Stopa zwrotu za ostatnie 5 lat (%). String, może mieć prefiks `+`.
+        zmianaMdD:
+          type: string
+          description: Stopa zwrotu od początku miesiąca (%). String, może mieć prefiks `+`.
+        zmianaRdD:
+          type: string
+          description: Stopa zwrotu od początku roku (%). String, może mieć prefiks `+`.
+
+    Ticker:
+      type: object
+      description: |
+        Pojedyncza pozycja (walor) w portfelu.
+
+        **Uwaga dot. typów:** Większość wartości liczbowych jest zwracana jako stringi.
+        `close` może być natywną liczbą lub stringiem w zależności od typu waloru.
+      properties:
+        tickerClear:
+          type: string
+          description: Oczyszczony symbol tickera (np. `NYSE_ARE`, `LSE_HMCD.L`).
+        nazwa:
+          type: string
+          description: Pełna nazwa waloru.
+        data:
+          type: string
+          description: Data ostatnich danych cenowych (YYYY-MM-DD).
+        close:
+          type: [number, string]
+          description: Ostatnia cena zamknięcia (liczba lub string w zależności od typu waloru).
+        zmianaDzienna:
+          type: string
+          description: Dzienna zmiana ceny (%). Liczba zakodowana jako string.
+        liczbaJednostek:
+          type: [number, string]
+          description: Liczba posiadanych jednostek/akcji. Liczba zakodowana jako string.
+        typ:
+          type: string
+          description: Etykieta typu aktywów.
+        typOrg:
+          type: string
+          description: Oryginalna (surowa) wartość typu aktywów.
+        wartosc:
+          type: string
+          description: Aktualna wartość pozycji w walucie portfela. Liczba zakodowana jako string.
+        udzial:
+          type: string
+          description: Udział pozycji jako procent całego portfela. Liczba zakodowana jako string.
+        zmiana:
+          type: string
+          description: Całkowita stopa zwrotu od zakupu (%). Liczba zakodowana jako string.
+        cenaZakupu:
+          type: [number, string]
+          description: Średnia cena zakupu za jednostkę. Liczba lub string.
+        zysk:
+          type: string
+          description: Całkowity zysk/strata w walucie portfela. Liczba zakodowana jako string.
+        kontoInvName:
+          type: string
+          description: Nazwa konta inwestycyjnego.
+        sektor:
+          type: string
+          description: Klasyfikacja sektorowa.
+        ryzyko:
+          type: string
+          description: Klasyfikacja poziomu ryzyka.
+        portfelOrg:
+          type: string
+          description: Oryginalna nazwa portfela, do którego należy walor.
+        dataInvStart:
+          type: string
+          description: Data rozpoczęcia inwestycji (YYYY-MM-DD).
+        okresInwestycji:
+          type: [integer, string]
+          description: Okres inwestycji w dniach lub `"---"` jeśli nie dotyczy.
+
+    TimeSeriesMap:
+      type: object
+      description: |
+        Szereg czasowy jako mapa kluczowana datami. Klucze to daty (YYYY-MM-DD),
+        wartości to liczby zakodowane jako stringi.
+      additionalProperties:
+        type: string
