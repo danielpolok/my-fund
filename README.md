@@ -97,3 +97,7 @@ Inspect response shape:
 ```bash
 python3 skills/my-fund/scripts/inspect_portfolio_response.py
 ```
+
+## License
+
+MIT. See `LICENSE`.
