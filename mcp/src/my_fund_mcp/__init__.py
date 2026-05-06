@@ -1,0 +1,2 @@
+"""myFund MCP server package."""
+

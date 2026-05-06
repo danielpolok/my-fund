@@ -2,12 +2,12 @@
 
 Shared agent resources for working with myFund.pl portfolio data.
 
-This repository currently contains the `my-fund` skill, which helps an agent fetch live portfolio data from the myFund API and answer portfolio-analysis questions. Future MCP servers and related helpers can be added alongside the skill.
+This repository contains the `my-fund` skill and a matching MCP server. Both help an agent fetch live portfolio data from the myFund API and answer portfolio-analysis questions.
 
 ## Repository Layout
 
 - `skills/my-fund/` contains the provider-neutral skill source.
-- `mcp/` is reserved for future MCP server definitions and helpers.
+- `mcp/` contains a Python FastMCP server backed by the official `mcp` SDK package.
 
 Local discovery links and source API documents can be kept outside version control when needed.
 
@@ -96,6 +96,13 @@ Inspect response shape:
 
 ```bash
 python3 skills/my-fund/scripts/inspect_portfolio_response.py
+```
+
+Run the MCP server over stdio:
+
+```bash
+cd mcp
+uv run my-fund-mcp
 ```
 
 ## License
