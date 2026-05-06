@@ -2,12 +2,12 @@
 
 ## Scope
 
-These instructions apply to the MCP package under `mcp/`.
+These instructions apply to every MCP server package under `mcp-servers/src/*/`.
 
 ## MCP Development
 
-- Keep the server read-only. New tools must not mutate myFund.pl state.
-- Use FastMCP patterns already present in `src/my_fund_mcp/server.py`.
+- Keep servers read-only. New tools must not mutate myFund.pl state.
+- Prefer FastMCP patterns already present in `mcp-servers/src/my-fund/src/my_fund_mcp/server.py`.
 - Tool names should keep the `myfund_` prefix and match MCP tool-name constraints.
 - Every tool must have a title, concise description, constrained input model, structured output where possible, and read-only annotations.
 - Upstream API or config failures should surface as MCP tool execution errors for analysis tools.
@@ -23,7 +23,7 @@ These instructions apply to the MCP package under `mcp/`.
 
 ## Checks
 
-Run from `mcp/` after MCP code or metadata changes:
+Run from the changed server directory, for example `mcp-servers/src/my-fund/`, after MCP code or metadata changes:
 
 ```bash
 uv sync --locked
@@ -38,4 +38,4 @@ Run from the repo root before finishing:
 python3 scripts/validate_release.py
 ```
 
-`uv build` creates ignored files under `mcp/dist/`; do not add them to git.
+`uv build` creates ignored `dist/` files under the server directory; do not add them to git.

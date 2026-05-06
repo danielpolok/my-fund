@@ -39,92 +39,123 @@ def main() -> int:
 
 
 def validate_mcp_metadata(errors: list[str]) -> None:
-    pyproject_path = ROOT / "mcp" / "pyproject.toml"
-    server_json_path = ROOT / "mcp" / "server.json"
-    package_init_path = ROOT / "mcp" / "src" / "my_fund_mcp" / "__init__.py"
-    readme_path = ROOT / "mcp" / "README.md"
+    mcp_dirs = sorted(path for path in (ROOT / "mcp-servers" / "src").glob("*") if path.is_dir())
+    if not mcp_dirs:
+        errors.append("mcp-servers/src/ must contain at least one MCP server package directory")
+        return
 
-    pyproject = load_pyproject(pyproject_path)
-    server_json = json.loads(server_json_path.read_text(encoding="utf-8"))
-    init_text = package_init_path.read_text(encoding="utf-8")
-    readme = readme_path.read_text(encoding="utf-8")
+    for mcp_dir in mcp_dirs:
+        pyproject_path = mcp_dir / "pyproject.toml"
+        server_json_path = mcp_dir / "server.json"
+        readme_path = mcp_dir / "README.md"
+        label = mcp_dir.relative_to(ROOT)
 
-    project = pyproject["project"]
-    package_version = project["version"]
-    init_version = extract_version(init_text)
-    registry_version = server_json.get("version")
-    package = (server_json.get("packages") or [{}])[0]
+        for required_path in (pyproject_path, server_json_path, readme_path):
+            if not required_path.exists():
+                errors.append(f"missing MCP metadata file: {required_path.relative_to(ROOT)}")
+                continue
+        if not pyproject_path.exists() or not server_json_path.exists() or not readme_path.exists():
+            continue
 
-    if init_version != package_version:
-        errors.append("__version__ must match mcp/pyproject.toml project.version")
-    if registry_version != package_version:
-        errors.append("mcp/server.json version must match mcp/pyproject.toml project.version")
-    if package.get("version") != package_version:
-        errors.append("mcp/server.json package version must match mcp/pyproject.toml project.version")
-    if package.get("identifier") != project["name"]:
-        errors.append("mcp/server.json package identifier must match mcp/pyproject.toml project.name")
+        pyproject = load_pyproject(pyproject_path)
+        server_json = json.loads(server_json_path.read_text(encoding="utf-8"))
+        readme = readme_path.read_text(encoding="utf-8")
 
-    server_name = server_json.get("name", "")
-    if not MCP_NAME_RE.fullmatch(server_name):
-        errors.append("mcp/server.json name must use the io.github.danielpolok/* namespace")
-    if f"mcp-name: {server_name}" not in readme:
-        errors.append("mcp/README.md must contain a PyPI verification mcp-name marker")
-    if package.get("registryType") != "pypi":
-        errors.append("mcp/server.json package registryType must be pypi")
-    if (package.get("transport") or {}).get("type") != "stdio":
-        errors.append("mcp/server.json package transport must default to stdio")
+        project = pyproject["project"]
+        package_version = project["version"]
+        init_path = mcp_dir / resolve_hatch_version_path(pyproject)
+        if not init_path.exists():
+            errors.append(f"missing MCP package version file: {init_path.relative_to(ROOT)}")
+            continue
 
-    env_vars = {item.get("name"): item for item in package.get("environmentVariables", [])}
-    for name in ("MYFUND_API_KEY", "MYFUND_PORTFEL"):
-        if name not in env_vars:
-            errors.append(f"mcp/server.json must declare required environment variable {name}")
-        elif not env_vars[name].get("isSecret"):
-            errors.append(f"mcp/server.json environment variable {name} must be marked secret")
+        init_version = extract_version(init_path.read_text(encoding="utf-8"))
+        registry_version = server_json.get("version")
+        package = (server_json.get("packages") or [{}])[0]
+
+        if init_version != package_version:
+            errors.append(f"{label}: __version__ must match pyproject.toml project.version")
+        if registry_version != package_version:
+            errors.append(f"{label}: server.json version must match pyproject.toml project.version")
+        if package.get("version") != package_version:
+            errors.append(f"{label}: server.json package version must match pyproject.toml project.version")
+        if package.get("identifier") != project["name"]:
+            errors.append(f"{label}: server.json package identifier must match pyproject.toml project.name")
+
+        server_name = server_json.get("name", "")
+        if not MCP_NAME_RE.fullmatch(server_name):
+            errors.append(f"{label}: server.json name must use the io.github.danielpolok/* namespace")
+        if f"mcp-name: {server_name}" not in readme:
+            errors.append(f"{label}: README.md must contain a PyPI verification mcp-name marker")
+        if package.get("registryType") != "pypi":
+            errors.append(f"{label}: server.json package registryType must be pypi")
+        if (package.get("transport") or {}).get("type") != "stdio":
+            errors.append(f"{label}: server.json package transport must default to stdio")
+
+        env_vars = {item.get("name"): item for item in package.get("environmentVariables", [])}
+        for name in ("MYFUND_API_KEY", "MYFUND_PORTFEL"):
+            if name not in env_vars:
+                errors.append(f"{label}: server.json must declare required environment variable {name}")
+            elif not env_vars[name].get("isSecret"):
+                errors.append(f"{label}: server.json environment variable {name} must be marked secret")
 
 
 def validate_skill_metadata(errors: list[str]) -> None:
-    skill_dir = ROOT / "skills" / "my-fund"
-    skill_path = skill_dir / "SKILL.md"
-    frontmatter = parse_frontmatter(skill_path)
-    skill_text = skill_path.read_text(encoding="utf-8")
+    skill_dirs = sorted(path for path in (ROOT / "skills").glob("*") if path.is_dir())
+    if not skill_dirs:
+        errors.append("skills/ must contain at least one skill directory")
+        return
 
-    name = frontmatter.get("name", "")
-    description = frontmatter.get("description", "")
+    for skill_dir in skill_dirs:
+        skill_path = skill_dir / "SKILL.md"
+        label = skill_dir.relative_to(ROOT)
+        if not skill_path.exists():
+            errors.append(f"missing skill file: {skill_path.relative_to(ROOT)}")
+            continue
 
-    if name != skill_dir.name:
-        errors.append("skill frontmatter name must match its directory name")
-    if not SKILL_NAME_RE.fullmatch(name) or "--" in name:
-        errors.append("skill name must use lowercase letters, numbers, and single hyphens")
-    if not (1 <= len(description) <= 1024):
-        errors.append("skill description must be 1-1024 characters")
-    if "license" not in frontmatter:
-        errors.append("skill frontmatter must include license")
-    if len(skill_text.splitlines()) > 500:
-        errors.append("SKILL.md must stay under 500 lines")
+        frontmatter = parse_frontmatter(skill_path)
+        skill_text = skill_path.read_text(encoding="utf-8")
 
-    forbidden_root_docs = {
-        "README.md",
-        "CHANGELOG.md",
-        "INSTALLATION_GUIDE.md",
-        "QUICK_REFERENCE.md",
-    }
-    present_forbidden = sorted(path.name for path in skill_dir.iterdir() if path.name in forbidden_root_docs)
-    if present_forbidden:
-        errors.append(f"skill directory must not contain auxiliary docs: {', '.join(present_forbidden)}")
+        name = frontmatter.get("name", "")
+        description = frontmatter.get("description", "")
 
-    openai_yaml = (skill_dir / "agents" / "openai.yaml").read_text(encoding="utf-8")
-    if "$my-fund" not in openai_yaml:
-        errors.append("skills/my-fund/agents/openai.yaml default_prompt must mention $my-fund")
-    if "allow_implicit_invocation: true" not in openai_yaml:
-        errors.append("skills/my-fund/agents/openai.yaml must declare implicit invocation policy")
+        if name != skill_dir.name:
+            errors.append(f"{label}: skill frontmatter name must match its directory name")
+        if not SKILL_NAME_RE.fullmatch(name) or "--" in name:
+            errors.append(f"{label}: skill name must use lowercase letters, numbers, and single hyphens")
+        if not (1 <= len(description) <= 1024):
+            errors.append(f"{label}: skill description must be 1-1024 characters")
+        if "license" not in frontmatter:
+            errors.append(f"{label}: skill frontmatter must include license")
+        if len(skill_text.splitlines()) > 500:
+            errors.append(f"{label}: SKILL.md must stay under 500 lines")
+
+        forbidden_root_docs = {
+            "README.md",
+            "CHANGELOG.md",
+            "INSTALLATION_GUIDE.md",
+            "QUICK_REFERENCE.md",
+        }
+        present_forbidden = sorted(path.name for path in skill_dir.iterdir() if path.name in forbidden_root_docs)
+        if present_forbidden:
+            errors.append(f"{label}: skill directory must not contain auxiliary docs: {', '.join(present_forbidden)}")
+
+        openai_yaml_path = skill_dir / "agents" / "openai.yaml"
+        if not openai_yaml_path.exists():
+            errors.append(f"missing skill agent metadata file: {openai_yaml_path.relative_to(ROOT)}")
+            continue
+        openai_yaml = openai_yaml_path.read_text(encoding="utf-8")
+        if f"${name}" not in openai_yaml:
+            errors.append(f"{label}: agents/openai.yaml default_prompt must mention ${name}")
+        if "allow_implicit_invocation: true" not in openai_yaml:
+            errors.append(f"{label}: agents/openai.yaml must declare implicit invocation policy")
 
 
 def validate_agent_instructions(errors: list[str]) -> None:
-    required_agents_files = (
+    required_agents_files = [
         ROOT / "AGENTS.md",
-        ROOT / "mcp" / "AGENTS.md",
-        ROOT / "skills" / "my-fund" / "AGENTS.md",
-    )
+        ROOT / "mcp-servers" / "AGENTS.md",
+        ROOT / "skills" / "AGENTS.md",
+    ]
     for path in required_agents_files:
         if not path.exists():
             errors.append(f"missing agent instructions file: {path.relative_to(ROOT)}")
@@ -152,8 +183,12 @@ def validate_tracked_files(errors: list[str]) -> None:
 
 
 def validate_python_syntax(errors: list[str]) -> None:
-    for relative_path in ("mcp/src", "mcp/tests", "skills/my-fund/scripts", "scripts"):
-        path = ROOT / relative_path
+    paths = [ROOT / "scripts"]
+    paths.extend(mcp_dir / "src" for mcp_dir in sorted((ROOT / "mcp-servers" / "src").glob("*")) if mcp_dir.is_dir())
+    paths.extend(mcp_dir / "tests" for mcp_dir in sorted((ROOT / "mcp-servers" / "src").glob("*")) if mcp_dir.is_dir())
+    paths.extend(skill_dir / "scripts" for skill_dir in sorted((ROOT / "skills").glob("*")) if skill_dir.is_dir())
+
+    for path in paths:
         if not path.exists():
             continue
         for python_file in sorted(path.rglob("*.py")):
@@ -185,7 +220,44 @@ def load_pyproject(path: Path) -> dict[str, Any]:
         if not match:
             raise ValueError(f"Could not find project.{key} in pyproject.toml")
         project[key] = match.group(1)
-    return {"project": project}
+
+    version_path = ""
+    version_path_match = re.search(
+        r'(?ms)^\[tool\.hatch\.version\]\n(.*?)(?:^\[|\Z)',
+        text,
+    )
+    if version_path_match:
+        path_match = re.search(r'(?m)^path\s*=\s*"([^"]+)"', version_path_match.group(1))
+        if path_match:
+            version_path = path_match.group(1)
+
+    result: dict[str, Any] = {"project": project}
+    if version_path:
+        result["tool"] = {"hatch": {"version": {"path": version_path}}}
+    return result
+
+
+def resolve_hatch_version_path(pyproject: dict[str, Any]) -> Path:
+    path = (
+        pyproject.get("tool", {})
+        .get("hatch", {})
+        .get("version", {})
+        .get("path")
+    )
+    if isinstance(path, str) and path:
+        return Path(path)
+
+    packages = (
+        pyproject.get("tool", {})
+        .get("hatch", {})
+        .get("build", {})
+        .get("targets", {})
+        .get("wheel", {})
+        .get("packages", [])
+    )
+    if packages:
+        return Path(packages[0]) / "__init__.py"
+    return Path("src") / "__init__.py"
 
 
 def parse_frontmatter(path: Path) -> dict[str, str]:

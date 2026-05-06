@@ -2,12 +2,17 @@
 
 Shared agent resources for working with myFund.pl portfolio data.
 
-This repository contains the `my-fund` skill and a matching MCP server. Both help an agent fetch live portfolio data from the myFund API and answer portfolio-analysis questions.
+This repository contains myFund-related Agent Skills and MCP servers. Each artifact is read-only and helps an agent fetch or analyze myFund API data for portfolio-analysis questions.
 
 ## Repository Layout
 
-- `skills/my-fund/` contains the provider-neutral skill source.
-- `mcp/` contains a Python FastMCP server backed by the official `mcp` SDK package.
+- `skills/*/` contains provider-neutral skill sources.
+- `mcp-servers/src/*/` contains Python FastMCP server packages backed by the official `mcp` SDK package.
+
+Current artifacts:
+
+- `skills/my-fund/`: portable myFund portfolio analysis skill.
+- `mcp-servers/src/my-fund/`: Python FastMCP server distributed as `my-fund-mcp`.
 
 Local discovery links and source API documents can be kept outside version control when needed.
 
@@ -103,19 +108,19 @@ python3 skills/my-fund/scripts/inspect_portfolio_response.py
 Run the MCP server over stdio:
 
 ```bash
-cd mcp
+cd mcp-servers/src/my-fund
 uv run my-fund-mcp
 ```
 
 ## Publishing Standards
 
-Release and publishing checks live in `PUBLISHING.md`. The MCP Registry manifest is `mcp/server.json`; keep its `name` and `version` aligned with `mcp/README.md`, `mcp/pyproject.toml`, and `mcp/src/my_fund_mcp/__init__.py`.
+Release and publishing checks live in `PUBLISHING.md`. Each MCP Registry manifest lives at `mcp-servers/src/<name>/server.json`; keep its `name` and `version` aligned with that MCP's `README.md`, `pyproject.toml`, and package `__init__.py`.
 
 Before publishing a skill or MCP release, run:
 
 ```bash
 python3 scripts/validate_release.py
-cd mcp
+cd mcp-servers/src/my-fund
 uv run python -m unittest discover -s tests
 ```
 

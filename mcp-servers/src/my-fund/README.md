@@ -34,7 +34,7 @@ Optional:
 
 Environment variables take precedence. If not exported, the server also checks:
 
-1. `mcp/.env`
+1. `mcp-servers/src/my-fund/.env`
 2. `skills/my-fund/.env`
 
 `MYFUND_API_BASE_URL` must use `https://` and point to `myfund.pl` unless `MYFUND_ALLOW_CUSTOM_API_BASE_URL=true` is explicitly set.
@@ -42,14 +42,14 @@ Environment variables take precedence. If not exported, the server also checks:
 ## Run
 
 ```bash
-cd mcp
+cd mcp-servers/src/my-fund
 uv run --with "mcp[cli]" my-fund-mcp
 ```
 
 To run the streamable HTTP transport:
 
 ```bash
-cd mcp
+cd mcp-servers/src/my-fund
 MY_FUND_MCP_TRANSPORT=streamable-http uv run --with "mcp[cli]" my-fund-mcp
 ```
 

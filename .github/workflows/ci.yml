@@ -35,13 +35,13 @@ jobs:
           python3 skills/my-fund/scripts/inspect_portfolio_response.py --help
 
       - name: Install MCP package
-        working-directory: mcp
+        working-directory: mcp-servers/src/my-fund
         run: uv sync --locked
 
       - name: Run MCP tests
-        working-directory: mcp
+        working-directory: mcp-servers/src/my-fund
         run: uv run python -m unittest discover -s tests
 
       - name: Compile Python sources
-        working-directory: mcp
+        working-directory: mcp-servers/src/my-fund
         run: uv run python -m compileall src tests

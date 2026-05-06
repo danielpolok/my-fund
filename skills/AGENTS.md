@@ -2,14 +2,14 @@
 
 ## Scope
 
-These instructions apply to the `my-fund` Agent Skill under `skills/my-fund/`.
+These instructions apply to every Agent Skill under `skills/*/`.
 
 ## Skill Development
 
 - Keep `SKILL.md` concise and operational; move detailed API contracts, analysis rules, and edge cases into `references/`.
 - Do not add `README.md`, changelogs, setup guides, or other auxiliary docs inside the skill directory.
 - Scripts must be deterministic, non-interactive, support `--help`, emit JSON to stdout for data output, and send diagnostics to stderr.
-- Use the canonical helper scripts for live API access. Do not duplicate API-fetch logic in prompts or docs.
+- Use canonical helper scripts for live API access when a skill needs myFund data. Do not duplicate API-fetch logic in prompts or docs.
 - Keep `agents/openai.yaml` aligned with `SKILL.md`; it is UI metadata, not agent instruction content.
 
 ## Runtime Configuration
@@ -22,7 +22,7 @@ These instructions apply to the `my-fund` Agent Skill under `skills/my-fund/`.
 
 ## Checks
 
-Run from the repo root after skill changes:
+Run from the repo root after skill changes. Include the changed skill's script checks, for example:
 
 ```bash
 python3 scripts/validate_release.py

@@ -1,20 +1,20 @@
 # Publishing Standards
 
-This repository publishes two agent-facing artifacts:
+This repository publishes myFund-related agent-facing artifacts:
 
-- `mcp/`: a read-only Python FastMCP server.
-- `skills/my-fund/`: a portable Agent Skill with helper scripts and references.
+- `mcp-servers/src/*/`: read-only Python FastMCP servers.
+- `skills/*/`: portable Agent Skills with helper scripts and references.
 
 These standards are based on the MCP specification and registry docs current on 2026-05-06, plus the Agent Skills specification and skill-creator guidance.
 
 ## MCP Release Standard
 
-Use `mcp/server.json` as the MCP Registry metadata source.
+Use each `mcp-servers/src/<name>/server.json` file as that MCP's Registry metadata source.
 
 Required release gates:
 
-- Keep the package version aligned across `mcp/pyproject.toml`, `mcp/src/my_fund_mcp/__init__.py`, and `mcp/server.json`.
-- Keep the registry name aligned between `mcp/server.json` and the PyPI verification marker in `mcp/README.md`.
+- Keep the package version aligned across `mcp-servers/src/<name>/pyproject.toml`, the package `__init__.py`, and `mcp-servers/src/<name>/server.json`.
+- Keep the registry name aligned between `mcp-servers/src/<name>/server.json` and the PyPI verification marker in `mcp-servers/src/<name>/README.md`.
 - Publish the package artifact first; the MCP Registry hosts metadata, not package files.
 - For PyPI registry ownership verification, keep `<!-- mcp-name: io.github.danielpolok/my-fund-mcp -->` in the package README.
 - Keep every tool read-only unless a future release explicitly adds a write path and a review gate for destructive operations.
@@ -28,7 +28,7 @@ Validation:
 
 ```bash
 python3 scripts/validate_release.py
-cd mcp
+cd mcp-servers/src/my-fund
 uv run python -m unittest discover -s tests
 uv run python -m compileall src tests
 ```
@@ -36,7 +36,7 @@ uv run python -m compileall src tests
 Publishing:
 
 ```bash
-cd mcp
+cd mcp-servers/src/my-fund
 python -m build
 twine upload dist/*
 mcp-publisher login github
@@ -49,7 +49,7 @@ The skill must remain lean and operational.
 
 Required release gates:
 
-- `skills/my-fund/SKILL.md` frontmatter must include `name`, `description`, `license`, and compatibility notes when runtime assumptions matter.
+- `skills/<name>/SKILL.md` frontmatter must include `name`, `description`, `license`, and compatibility notes when runtime assumptions matter.
 - The `name` must match the directory name and use lowercase letters, numbers, and hyphens only.
 - Keep `SKILL.md` under 500 lines and use `references/` for detailed API contracts, analysis rules, and edge cases.
 - List runnable scripts in `SKILL.md`; scripts must be non-interactive, support `--help`, emit structured JSON to stdout, and send diagnostics to stderr.

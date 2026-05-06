@@ -91,7 +91,7 @@ class RuntimeEnv:
 
 
 def project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[5]
 
 
 def load_dotenv(path: Path) -> dict[str, str]:
@@ -115,7 +115,7 @@ def load_dotenv(path: Path) -> dict[str, str]:
 def load_runtime_env() -> RuntimeEnv:
     root = project_root()
     dotenv_paths = [
-        root / "mcp" / ".env",
+        root / "mcp-servers" / "src" / "my-fund" / ".env",
         root / "skills" / "my-fund" / ".env",
     ]
     values: dict[str, str] = {}
