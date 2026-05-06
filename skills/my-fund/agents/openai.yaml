@@ -1,0 +1,7 @@
+interface:
+  display_name: "myFund Portfolio"
+  short_description: "Analyze live myFund portfolio data"
+  default_prompt: "Use $my-fund to analyze my live portfolio allocation, holdings, and returns."
+
+policy:
+  allow_implicit_invocation: true

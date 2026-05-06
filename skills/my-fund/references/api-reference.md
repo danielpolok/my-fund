@@ -3,7 +3,7 @@
 This skill uses the documented myFund API endpoint:
 
 ```http
-GET https://myfund.pl/API/v1/getPortfel.php?portfel=<PORTFOLIO_NAME>&apiKey=<API_KEY>&format=json
+GET https://myfund.pl/API/v1/getPortfel.php?portfel=<PORTFOLIO_NAME>&apiKey=<MYFUND_API_KEY>&format=json
 ```
 
 ## Request Parameters
@@ -13,7 +13,7 @@ GET https://myfund.pl/API/v1/getPortfel.php?portfel=<PORTFOLIO_NAME>&apiKey=<API
   - Portfolio name or selector string as displayed in the myFund account.
 - `apiKey`
   - Required.
-  - Loaded from `.env` as `API_KEY`.
+  - Loaded from `.env` as `MYFUND_API_KEY`.
 - `format`
   - Required.
   - Only `json` is documented.

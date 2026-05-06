@@ -11,11 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 
 DEFAULT_API_BASE_URL = "https://myfund.pl/API/v1"
+MYFUND_HOST_SUFFIX = ".myfund.pl"
+USER_AGENT = "my-fund-skill/0.1.0"
 SUMMARY_NUMERIC_FIELDS = {
     "close",
     "zmianaDzienna",
@@ -134,10 +136,10 @@ def config_source_hint(runtime_env: RuntimeEnv) -> str:
 def resolve_config(portfolio_override: str | None) -> RuntimeConfig:
     runtime_env = load_runtime_env()
     env = runtime_env.values
-    api_key = env.get("API_KEY")
+    api_key = env.get("MYFUND_API_KEY")
     if not api_key:
         raise MyFundError(
-            f"Missing API_KEY. {config_source_hint(runtime_env)}"
+            f"Missing MYFUND_API_KEY. {config_source_hint(runtime_env)}"
         )
 
     portfolio = portfolio_override or env.get("MYFUND_PORTFEL") or env.get("MYFUND_PORTFOLIO")
@@ -146,8 +148,35 @@ def resolve_config(portfolio_override: str | None) -> RuntimeConfig:
             "Missing portfolio. Pass --portfolio, export MYFUND_PORTFEL, or define MYFUND_PORTFEL "
             f"in the skill-local .env. MYFUND_PORTFOLIO is also accepted for compatibility. {config_source_hint(runtime_env)}"
         )
-    api_base_url = env.get("MYFUND_API_BASE_URL", DEFAULT_API_BASE_URL).rstrip("/")
+    api_base_url = validate_api_base_url(
+        env.get("MYFUND_API_BASE_URL", DEFAULT_API_BASE_URL),
+        allow_custom=_truthy(env.get("MYFUND_ALLOW_CUSTOM_API_BASE_URL")),
+    )
     return RuntimeConfig(api_key=api_key, portfolio=portfolio, api_base_url=api_base_url)
+
+
+def validate_api_base_url(api_base_url: str, *, allow_custom: bool = False) -> str:
+    base_url = api_base_url.strip().rstrip("/")
+    parsed = urlparse(base_url)
+    if parsed.scheme != "https":
+        raise MyFundError("MYFUND_API_BASE_URL must use https://.")
+    if not parsed.netloc or not parsed.hostname:
+        raise MyFundError("MYFUND_API_BASE_URL must include a hostname.")
+    if parsed.params or parsed.query or parsed.fragment:
+        raise MyFundError("MYFUND_API_BASE_URL must not include params, query strings, or fragments.")
+
+    hostname = parsed.hostname.lower()
+    is_myfund_host = hostname == "myfund.pl" or hostname.endswith(MYFUND_HOST_SUFFIX)
+    if not is_myfund_host and not allow_custom:
+        raise MyFundError(
+            "MYFUND_API_BASE_URL must point to myfund.pl. Set "
+            "MYFUND_ALLOW_CUSTOM_API_BASE_URL=true only for a controlled test or staging endpoint."
+        )
+    return base_url
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def require_portfolio(config: RuntimeConfig) -> str:
@@ -173,7 +202,7 @@ def fetch_portfolio_payload(config: RuntimeConfig, timeout: float = 20.0) -> dic
     portfolio = require_portfolio(config)
     request = Request(
         build_request_url(config.api_base_url, portfolio, config.api_key),
-        headers={"Accept": "application/json", "User-Agent": "my-fund/1.0"},
+        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
         method="GET",
     )
 
@@ -181,7 +210,7 @@ def fetch_portfolio_payload(config: RuntimeConfig, timeout: float = 20.0) -> dic
         with urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8")
     except HTTPError as exc:
-        message = exc.read().decode("utf-8", errors="replace")
+        message = _redact_secret(exc.read().decode("utf-8", errors="replace"), config.api_key)
         raise MyFundError(f"HTTP {exc.code} from myFund API: {message}") from exc
     except URLError as exc:
         raise MyFundError(f"Could not reach myFund API: {exc.reason}") from exc
@@ -195,6 +224,12 @@ def fetch_portfolio_payload(config: RuntimeConfig, timeout: float = 20.0) -> dic
         raise MyFundError("myFund API returned a non-object JSON payload.")
 
     return data
+
+
+def _redact_secret(message: str, secret: str) -> str:
+    if not secret:
+        return message
+    return message.replace(secret, "<redacted>")
 
 
 def _coerce_number(value: Any) -> Any:

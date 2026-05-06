@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+from collections import deque
 from enum import Enum
+from threading import Lock
+from time import monotonic
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -9,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .api import (
     MyFundError,
+    RuntimeConfig,
     fetch_portfolio_payload,
     inspect_payload,
     normalize_payload,
@@ -17,7 +21,30 @@ from .api import (
 )
 
 
-mcp = FastMCP("my_fund_mcp")
+SERVER_INSTRUCTIONS = (
+    "Read-only myFund.pl portfolio analysis. Check returned status fields before analysis, "
+    "treat upstream API failures as tool execution errors, avoid exposing credentials, and "
+    "do not execute trades, rebalance, mutate account data, or create dashboards/charts."
+)
+
+READ_ONLY_OPEN_WORLD_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+RATE_LIMIT_WINDOW_SECONDS = 60.0
+DEFAULT_MAX_REQUESTS_PER_MINUTE = 30
+MAX_REQUEST_TIMESTAMPS: deque[float] = deque()
+RATE_LIMIT_LOCK = Lock()
+
+mcp = FastMCP(
+    "my-fund-mcp",
+    instructions=SERVER_INSTRUCTIONS,
+    website_url="https://github.com/danielpolok/my-fund",
+    json_response=True,
+    stateless_http=True,
+)
 
 
 class PortfolioInput(BaseModel):
@@ -91,73 +118,85 @@ class PerformanceInput(PortfolioInput):
 
 
 def _portfolio_snapshot(params: PortfolioInput) -> dict[str, Any]:
+    config = resolve_config(params.portfolio)
+    payload = _fetch_rate_limited_portfolio_payload(config, timeout=params.timeout)
+    require_success(payload)
+    return normalize_payload(payload, config)
+
+
+def _fetch_rate_limited_portfolio_payload(config: RuntimeConfig, *, timeout: float) -> dict[str, Any]:
+    _enforce_rate_limit()
+    return fetch_portfolio_payload(config, timeout=timeout)
+
+
+def _enforce_rate_limit() -> None:
+    limit = _max_requests_per_minute()
+    now = monotonic()
+    window_start = now - RATE_LIMIT_WINDOW_SECONDS
+
+    with RATE_LIMIT_LOCK:
+        while MAX_REQUEST_TIMESTAMPS and MAX_REQUEST_TIMESTAMPS[0] < window_start:
+            MAX_REQUEST_TIMESTAMPS.popleft()
+        if len(MAX_REQUEST_TIMESTAMPS) >= limit:
+            raise MyFundError(
+                "Rate limit exceeded for myFund API calls. Retry later or set "
+                "MY_FUND_MCP_MAX_REQUESTS_PER_MINUTE to a controlled higher value."
+            )
+        MAX_REQUEST_TIMESTAMPS.append(now)
+
+
+def _max_requests_per_minute() -> int:
+    raw_limit = os.environ.get(
+        "MY_FUND_MCP_MAX_REQUESTS_PER_MINUTE",
+        str(DEFAULT_MAX_REQUESTS_PER_MINUTE),
+    )
     try:
-        config = resolve_config(params.portfolio)
-        payload = fetch_portfolio_payload(config, timeout=params.timeout)
-        require_success(payload)
-        return normalize_payload(payload, config)
-    except MyFundError as exc:
-        return {"error": str(exc)}
+        limit = int(raw_limit)
+    except ValueError as exc:
+        raise MyFundError("MY_FUND_MCP_MAX_REQUESTS_PER_MINUTE must be an integer.") from exc
+    if not 1 <= limit <= 600:
+        raise MyFundError("MY_FUND_MCP_MAX_REQUESTS_PER_MINUTE must be between 1 and 600.")
+    return limit
 
 
 @mcp.tool(
     name="myfund_fetch_portfolio",
-    annotations={
-        "title": "Fetch myFund Portfolio",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title="Fetch myFund Portfolio",
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    structured_output=True,
 )
 def myfund_fetch_portfolio(params: FetchPortfolioInput) -> dict[str, Any]:
     """Fetch live myFund portfolio data as normalized JSON or the raw API payload."""
-    try:
-        config = resolve_config(params.portfolio)
-        payload = fetch_portfolio_payload(config, timeout=params.timeout)
-        if params.raw:
-            return payload
-        require_success(payload)
-        return normalize_payload(payload, config)
-    except MyFundError as exc:
-        return {"error": str(exc)}
+    config = resolve_config(params.portfolio)
+    payload = _fetch_rate_limited_portfolio_payload(config, timeout=params.timeout)
+    if params.raw:
+        return payload
+    require_success(payload)
+    return normalize_payload(payload, config)
 
 
 @mcp.tool(
     name="myfund_inspect_portfolio",
-    annotations={
-        "title": "Inspect myFund Portfolio Response",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title="Inspect myFund Portfolio Response",
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    structured_output=True,
 )
 def myfund_inspect_portfolio(params: PortfolioInput) -> dict[str, Any]:
     """Inspect live myFund response shape, section presence, counts, and type samples."""
-    try:
-        config = resolve_config(params.portfolio)
-        payload = fetch_portfolio_payload(config, timeout=params.timeout)
-        return inspect_payload(payload, config)
-    except MyFundError as exc:
-        return {"error": str(exc)}
+    config = resolve_config(params.portfolio)
+    payload = _fetch_rate_limited_portfolio_payload(config, timeout=params.timeout)
+    return inspect_payload(payload, config)
 
 
 @mcp.tool(
     name="myfund_get_portfolio_summary",
-    annotations={
-        "title": "Get myFund Portfolio Summary",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title="Get myFund Portfolio Summary",
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    structured_output=True,
 )
 def myfund_get_portfolio_summary(params: PortfolioInput) -> dict[str, Any]:
     """Return API status, metadata, portfolio summary fields, and latest derived metrics."""
     snapshot = _portfolio_snapshot(params)
-    if "error" in snapshot:
-        return snapshot
     return {
         "meta": snapshot["meta"],
         "status": snapshot["status"],
@@ -169,19 +208,13 @@ def myfund_get_portfolio_summary(params: PortfolioInput) -> dict[str, Any]:
 
 @mcp.tool(
     name="myfund_list_holdings",
-    annotations={
-        "title": "List myFund Holdings",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title="List myFund Holdings",
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    structured_output=True,
 )
 def myfund_list_holdings(params: ListHoldingsInput) -> dict[str, Any]:
     """List holdings sorted by value, weight, profit, loss, return, or name."""
     snapshot = _portfolio_snapshot(params)
-    if "error" in snapshot:
-        return snapshot
 
     holdings = list(snapshot["holdings"])
     if params.sort_by == HoldingSort.VALUE:
@@ -209,19 +242,13 @@ def myfund_list_holdings(params: ListHoldingsInput) -> dict[str, Any]:
 
 @mcp.tool(
     name="myfund_get_allocations",
-    annotations={
-        "title": "Get myFund Allocations",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title="Get myFund Allocations",
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    structured_output=True,
 )
 def myfund_get_allocations(params: AllocationInput) -> dict[str, Any]:
     """Return portfolio allocation by asset type, security, or both."""
     snapshot = _portfolio_snapshot(params)
-    if "error" in snapshot:
-        return snapshot
 
     derived = snapshot["derived"]
     response: dict[str, Any] = {
@@ -237,19 +264,13 @@ def myfund_get_allocations(params: AllocationInput) -> dict[str, Any]:
 
 @mcp.tool(
     name="myfund_get_performance",
-    annotations={
-        "title": "Get myFund Performance",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title="Get myFund Performance",
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    structured_output=True,
 )
 def myfund_get_performance(params: PerformanceInput) -> dict[str, Any]:
     """Return latest performance metrics, benchmark name, and time-series performance data."""
     snapshot = _portfolio_snapshot(params)
-    if "error" in snapshot:
-        return snapshot
     portfolio = snapshot["portfolio"] or {}
     history = snapshot["derived"]["history"][params.window.value]
     return {
@@ -292,7 +313,11 @@ def _number(value: Any) -> float:
 
 
 def main() -> None:
-    transport = os.environ.get("MY_FUND_MCP_TRANSPORT", "stdio")
+    transport = os.environ.get("MY_FUND_MCP_TRANSPORT", "stdio").strip() or "stdio"
+    if transport not in {"stdio", "streamable-http", "sse"}:
+        raise SystemExit(
+            "Unsupported MY_FUND_MCP_TRANSPORT. Use one of: stdio, streamable-http, sse."
+        )
     mcp.run(transport=transport)
 
 

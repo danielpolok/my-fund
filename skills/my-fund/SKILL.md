@@ -1,6 +1,8 @@
 ---
 name: my-fund
 description: Use when analyzing a myFund.pl investment portfolio through the live API, answering portfolio questions, comparing performance to benchmark, or investigating holdings, allocation, and time series data. This skill provides data analysis only and must not render UI, dashboards, charts, diagrams, HTML reports, or Mermaid output.
+license: MIT
+compatibility: Requires Python 3.11+ and network access to https://myfund.pl.
 ---
 
 # my-fund
@@ -15,8 +17,9 @@ Use this skill for myFund portfolio analysis. This skill is operational: fetch l
    - If `MYFUND_PORTFEL` is absent, `MYFUND_PORTFOLIO` is also accepted as a compatibility alias.
    - If neither is available, ask the user which portfolio to use.
 2. Load credentials from exported environment variables or the skill-local `.env`.
-   - `API_KEY` is required.
+   - `MYFUND_API_KEY` is required.
    - `MYFUND_API_BASE_URL` is optional and defaults to `https://myfund.pl/API/v1`.
+   - `MYFUND_API_BASE_URL` must use `https://` and point to `myfund.pl` unless `MYFUND_ALLOW_CUSTOM_API_BASE_URL=true` is set for a controlled test or staging endpoint.
    - Exported environment variables override values from `.env`.
    - Use `.env.example` as a template for local setup, but do not load it as runtime config.
    - If required config is missing, clearly tell the user whether the skill-local `.env` file was not found or the file exists but lacks the required value.

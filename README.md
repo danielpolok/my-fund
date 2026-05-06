@@ -38,13 +38,14 @@ The skill needs myFund API access credentials and a portfolio selector.
 
 Required:
 
-- `API_KEY`: your myFund API key.
+- `MYFUND_API_KEY`: your myFund API key.
 - `MYFUND_PORTFEL`: the myFund portfolio name or selector to pass as the API `portfel` parameter.
 
 Optional:
 
 - `MYFUND_API_BASE_URL`: defaults to `https://myfund.pl/API/v1`.
 - `MYFUND_PORTFOLIO`: compatibility alias for `MYFUND_PORTFEL`.
+- `MYFUND_ALLOW_CUSTOM_API_BASE_URL`: set to `true` only for a controlled test or staging endpoint outside `myfund.pl`.
 
 Credential precedence:
 
@@ -63,15 +64,16 @@ cp skills/my-fund/.env.example skills/my-fund/.env
 Example `.env` shape:
 
 ```bash
-API_KEY=
+MYFUND_API_KEY=
 MYFUND_PORTFEL=
 MYFUND_API_BASE_URL=https://myfund.pl/API/v1
+MYFUND_ALLOW_CUSTOM_API_BASE_URL=false
 ```
 
 Alternatively, export values in your shell:
 
 ```bash
-export API_KEY=...
+export MYFUND_API_KEY=...
 export MYFUND_PORTFEL=...
 export MYFUND_API_BASE_URL=https://myfund.pl/API/v1
 ```
@@ -103,6 +105,18 @@ Run the MCP server over stdio:
 ```bash
 cd mcp
 uv run my-fund-mcp
+```
+
+## Publishing Standards
+
+Release and publishing checks live in `PUBLISHING.md`. The MCP Registry manifest is `mcp/server.json`; keep its `name` and `version` aligned with `mcp/README.md`, `mcp/pyproject.toml`, and `mcp/src/my_fund_mcp/__init__.py`.
+
+Before publishing a skill or MCP release, run:
+
+```bash
+python3 scripts/validate_release.py
+cd mcp
+uv run python -m unittest discover -s tests
 ```
 
 ## License

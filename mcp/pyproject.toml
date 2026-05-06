@@ -4,12 +4,31 @@ version = "0.1.0"
 description = "MCP server for read-only myFund.pl portfolio analysis."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+keywords = ["mcp", "myfund", "portfolio", "investment", "agent-tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = [
     "mcp[cli]>=1.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/danielpolok/my-fund"
+Repository = "https://github.com/danielpolok/my-fund"
+Issues = "https://github.com/danielpolok/my-fund/issues"
+
 [project.scripts]
 my-fund-mcp = "my_fund_mcp.server:main"
+
+[tool.hatch.version]
+path = "src/my_fund_mcp/__init__.py"
 
 [build-system]
 requires = ["hatchling"]
