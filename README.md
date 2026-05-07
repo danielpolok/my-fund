@@ -13,6 +13,7 @@ Current artifacts:
 
 - `skills/my-fund/`: portable myFund portfolio analysis skill.
 - `mcp-servers/src/my-fund/`: Python FastMCP server distributed as `my-fund-mcp`.
+- `mcp-servers/src/my-fund-app/`: Python FastMCP app distributed as `my-fund-app-mcp`, with an interactive dashboard UI layer.
 
 Local discovery links and source API documents can be kept outside version control when needed.
 
@@ -112,6 +113,13 @@ cd mcp-servers/src/my-fund
 uv run my-fund-mcp
 ```
 
+Run the dashboard MCP app over stdio:
+
+```bash
+cd mcp-servers/src/my-fund-app
+uv run my-fund-app-mcp
+```
+
 ## Publishing Standards
 
 Release and publishing checks live in `PUBLISHING.md`. Each MCP Registry manifest lives at `mcp-servers/src/<name>/server.json`; keep its `name` and `version` aligned with that MCP's `README.md`, `pyproject.toml`, and package `__init__.py`.
@@ -121,6 +129,8 @@ Before publishing a skill or MCP release, run:
 ```bash
 python3 scripts/validate_release.py
 cd mcp-servers/src/my-fund
+uv run python -m unittest discover -s tests
+cd ../my-fund-app
 uv run python -m unittest discover -s tests
 ```
 

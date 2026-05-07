@@ -17,6 +17,7 @@ Required release gates:
 - Keep the registry name aligned between `mcp-servers/src/<name>/server.json` and the PyPI verification marker in `mcp-servers/src/<name>/README.md`.
 - Publish the package artifact first; the MCP Registry hosts metadata, not package files.
 - For PyPI registry ownership verification, keep `<!-- mcp-name: io.github.danielpolok/my-fund-mcp -->` in the package README.
+- For the dashboard MCP app, keep `<!-- mcp-name: io.github.danielpolok/my-fund-app-mcp -->` in `mcp-servers/src/my-fund-app/README.md`.
 - Keep every tool read-only unless a future release explicitly adds a write path and a review gate for destructive operations.
 - Define constrained input schemas, output schemas where possible, and tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
 - Return upstream/API failures as MCP tool execution errors for analysis tools; diagnostic/raw tools must make upstream failure status explicit and must not hide it in an ambiguous `error` key.
@@ -29,6 +30,9 @@ Validation:
 ```bash
 python3 scripts/validate_release.py
 cd mcp-servers/src/my-fund
+uv run python -m unittest discover -s tests
+uv run python -m compileall src tests
+cd ../my-fund-app
 uv run python -m unittest discover -s tests
 uv run python -m compileall src tests
 ```

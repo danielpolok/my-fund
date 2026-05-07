@@ -1,0 +1,61 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.danielpolok/my-fund-app-mcp",
+  "title": "myFund Portfolio Dashboard",
+  "description": "Read-only MCP app for visualizing live myFund.pl investment portfolio value, holdings, allocation, and benchmark performance in an interactive dashboard.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/danielpolok/my-fund",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "my-fund-app-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MYFUND_API_KEY",
+          "description": "myFund.pl API key.",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "MYFUND_PORTFEL",
+          "description": "myFund.pl portfolio selector passed as the API portfel parameter.",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "MYFUND_API_BASE_URL",
+          "description": "myFund API base URL. Defaults to https://myfund.pl/API/v1.",
+          "isRequired": false,
+          "format": "string",
+          "default": "https://myfund.pl/API/v1",
+          "isSecret": false
+        },
+        {
+          "name": "MY_FUND_MCP_TRANSPORT",
+          "description": "Optional local transport override: stdio, streamable-http, or sse. Defaults to stdio.",
+          "isRequired": false,
+          "format": "string",
+          "default": "stdio",
+          "isSecret": false
+        },
+        {
+          "name": "MY_FUND_MCP_MAX_REQUESTS_PER_MINUTE",
+          "description": "Optional per-process myFund API call rate limit. Defaults to 30.",
+          "isRequired": false,
+          "format": "string",
+          "default": "30",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

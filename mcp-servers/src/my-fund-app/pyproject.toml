@@ -1,0 +1,41 @@
+[project]
+name = "my-fund-app-mcp"
+version = "0.1.0"
+description = "MCP app for read-only myFund.pl portfolio dashboards."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["mcp", "mcp-apps", "myfund", "portfolio", "investment", "dashboard"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "mcp[cli]>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/danielpolok/my-fund"
+Repository = "https://github.com/danielpolok/my-fund"
+Issues = "https://github.com/danielpolok/my-fund/issues"
+
+[project.scripts]
+my-fund-app-mcp = "my_fund_app_mcp.server:main"
+
+[tool.hatch.version]
+path = "src/my_fund_app_mcp/__init__.py"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_fund_app_mcp"]
+include = [
+    "src/my_fund_app_mcp/widgets/*.html",
+]
