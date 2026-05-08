@@ -5,21 +5,39 @@ import unittest
 from unittest.mock import patch
 
 from my_fund_app_mcp.server import (
+    AllocationInput,
     DASHBOARD_RESOURCE_URI,
+    HoldingSort,
+    ListHoldingsInput,
+    PerformanceInput,
+    PortfolioInput,
     RESOURCE_MIME_TYPE,
     DashboardInput,
     _dashboard_payload,
     mcp,
+    myfund_get_allocations,
+    myfund_get_performance,
+    myfund_get_portfolio_summary,
+    myfund_list_holdings,
     myfund_portfolio_dashboard_widget,
 )
 
 
 class AppServerContractTests(unittest.TestCase):
-    def test_dashboard_tool_and_hidden_helper_have_app_metadata(self) -> None:
+    def test_app_exposes_basic_mcp_tools_plus_widget_tools(self) -> None:
         tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+        expected_tools = {
+            "myfund_fetch_portfolio",
+            "myfund_inspect_portfolio",
+            "myfund_get_portfolio_summary",
+            "myfund_list_holdings",
+            "myfund_get_allocations",
+            "myfund_get_performance",
+            "myfund_show_portfolio_dashboard",
+            "myfund_app_get_dashboard_data",
+        }
 
-        self.assertIn("myfund_show_portfolio_dashboard", tools)
-        self.assertIn("myfund_app_get_dashboard_data", tools)
+        self.assertEqual(set(tools), expected_tools)
         self.assertEqual(
             tools["myfund_show_portfolio_dashboard"].meta["ui"]["resourceUri"],
             DASHBOARD_RESOURCE_URI,
@@ -40,6 +58,11 @@ class AppServerContractTests(unittest.TestCase):
             self.assertIsNotNone(tool.outputSchema)
             self.assertTrue(tool.annotations.readOnlyHint)
             self.assertFalse(tool.annotations.destructiveHint)
+
+    def test_app_exposes_basic_analysis_prompt(self) -> None:
+        prompts = {prompt.name: prompt for prompt in asyncio.run(mcp.list_prompts())}
+
+        self.assertIn("myfund_portfolio_analysis", prompts)
 
     def test_dashboard_resource_is_mcp_app_html(self) -> None:
         resources = {str(resource.uri): resource for resource in asyncio.run(mcp.list_resources())}
@@ -72,6 +95,35 @@ class AppServerContractTests(unittest.TestCase):
         self.assertIn("return_vs_benchmark", chart_ids)
         self.assertIn("allocation_by_security", chart_ids)
 
+    def test_basic_summary_tool_matches_myfund_mcp_capability(self) -> None:
+        with patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_snapshot()):
+            summary = myfund_get_portfolio_summary(PortfolioInput())
+
+        self.assertEqual(summary["status"]["code"], "0")
+        self.assertEqual(summary["latest"]["portfolio_value"], 1000)
+        self.assertEqual(summary["portfolio"]["benchName"], "Benchmark")
+
+    def test_basic_holdings_tool_sorts_and_limits_like_myfund_mcp(self) -> None:
+        with patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_snapshot()):
+            holdings = myfund_list_holdings(
+                ListHoldingsInput(sort_by=HoldingSort.NAME, limit=1)
+            )
+
+        self.assertEqual(holdings["sort_by"], "name")
+        self.assertEqual(holdings["count"], 1)
+        self.assertEqual(holdings["total_holdings"], 2)
+        self.assertEqual(holdings["holdings"][0]["nazwa"], "Alpha")
+
+    def test_basic_allocation_and_performance_tools_match_myfund_mcp_capability(self) -> None:
+        with patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_snapshot()):
+            allocations = myfund_get_allocations(AllocationInput())
+            performance = myfund_get_performance(PerformanceInput())
+
+        self.assertIn("allocation_by_type", allocations)
+        self.assertIn("allocation_by_security", allocations)
+        self.assertEqual(performance["benchmark_name"], "Benchmark")
+        self.assertEqual(performance["history"]["benchmark_delta"], [0.2, 0.4])
+
 
 def _sample_snapshot() -> dict[str, object]:
     return {
@@ -83,6 +135,10 @@ def _sample_snapshot() -> dict[str, object]:
             "top_level_keys": [],
         },
         "status": {"code": "0", "ok": True, "text": "OK"},
+        "raw_presence": {
+            "present": ["status", "portfel", "tickers"],
+            "missing": [],
+        },
         "portfolio": {
             "wartosc": 1000,
             "zysk": 100,
@@ -100,6 +156,26 @@ def _sample_snapshot() -> dict[str, object]:
             "zmianaRdD": 6,
             "benchName": "Benchmark",
         },
+        "holdings": [
+            {
+                "id": "alpha",
+                "nazwa": "Alpha",
+                "tickerClear": "ALP",
+                "wartosc": 700,
+                "udzial": 70,
+                "zysk": 90,
+                "zmiana": 12,
+            },
+            {
+                "id": "beta",
+                "nazwa": "Beta",
+                "tickerClear": "BET",
+                "wartosc": 300,
+                "udzial": 30,
+                "zysk": 10,
+                "zmiana": 3,
+            },
+        ],
         "derived": {
             "latest": {
                 "portfolio_value": 1000,

@@ -20,10 +20,18 @@ The app can visualize the chartable parts of the normalized myFund payload:
 
 ## Tools
 
+- `myfund_fetch_portfolio`: fetch the raw or normalized live portfolio snapshot.
+- `myfund_inspect_portfolio`: inspect response shape, section counts, and type samples.
+- `myfund_get_portfolio_summary`: return status, latest metrics, and portfolio-level summary.
+- `myfund_list_holdings`: list holdings sorted by value, weight, profit, loss, return, or name.
+- `myfund_get_allocations`: return allocation by asset type, security, or both.
+- `myfund_get_performance`: return period return metrics and time-series performance data.
 - `myfund_show_portfolio_dashboard`: opens the interactive dashboard and returns the dashboard JSON payload.
 - `myfund_app_get_dashboard_data`: app-only helper used by the widget to refresh or switch time windows.
 
-Both tools are read-only. The myFund API may cache identical requests for 5 minutes.
+All tools are read-only. The myFund API may cache identical requests for 5 minutes.
+
+The app also provides the `myfund_portfolio_analysis` prompt, grounded in the same read-only analysis boundary.
 
 ## Configuration
 
