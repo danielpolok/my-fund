@@ -1,0 +1,59 @@
+{
+  "events": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "instrument_type": "stock",
+      "ex_dividend_date": "2026-05-10",
+      "payment_date": "2026-05-21",
+      "dividend_per_share": 0.26,
+      "currency": "USD",
+      "status": "confirmed",
+      "source": "mock-beta"
+    },
+    {
+      "ticker": "MSFT",
+      "name": "Microsoft Corporation",
+      "instrument_type": "stock",
+      "ex_dividend_date": "2026-05-14",
+      "payment_date": "2026-06-11",
+      "dividend_per_share": 0.83,
+      "currency": "USD",
+      "status": "confirmed",
+      "source": "mock-beta"
+    },
+    {
+      "ticker": "VUSA",
+      "name": "Vanguard S&P 500 UCITS ETF",
+      "instrument_type": "etf",
+      "ex_dividend_date": "2026-06-18",
+      "payment_date": "2026-07-02",
+      "dividend_per_share": 0.31,
+      "currency": "USD",
+      "status": "estimated",
+      "source": "mock-beta"
+    },
+    {
+      "ticker": "VWCE",
+      "name": "Vanguard FTSE All-World UCITS ETF",
+      "instrument_type": "etf",
+      "ex_dividend_date": "2026-09-17",
+      "payment_date": "2026-09-30",
+      "dividend_per_share": 0.0,
+      "currency": "USD",
+      "status": "not_applicable",
+      "source": "mock-beta"
+    },
+    {
+      "ticker": "PZU",
+      "name": "Powszechny Zaklad Ubezpieczen SA",
+      "instrument_type": "stock",
+      "ex_dividend_date": "2026-09-24",
+      "payment_date": "2026-10-15",
+      "dividend_per_share": 4.34,
+      "currency": "PLN",
+      "status": "estimated",
+      "source": "mock-beta"
+    }
+  ]
+}

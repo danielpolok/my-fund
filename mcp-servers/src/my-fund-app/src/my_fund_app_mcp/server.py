@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 from collections import deque
+from datetime import date, datetime
 from enum import Enum
 from importlib import resources
+from pathlib import Path
 from threading import Lock
 from time import monotonic
 from typing import Any
@@ -16,7 +20,9 @@ from .api import (
     RuntimeConfig,
     fetch_portfolio_payload,
     inspect_payload,
+    load_runtime_env,
     normalize_payload,
+    project_root,
     require_success,
     resolve_config,
 )
@@ -24,6 +30,7 @@ from .api import (
 
 RESOURCE_MIME_TYPE = "text/html;profile=mcp-app"
 DASHBOARD_RESOURCE_URI = "ui://my-fund-app/portfolio-dashboard.html"
+DIVIDEND_CALENDAR_RESOURCE_URI = "ui://my-fund-app/dividend-calendar.html"
 RATE_LIMIT_WINDOW_SECONDS = 60.0
 DEFAULT_MAX_REQUESTS_PER_MINUTE = 30
 MAX_REQUEST_TIMESTAMPS: deque[float] = deque()
@@ -137,6 +144,27 @@ class DashboardInput(PortfolioInput):
         description="Maximum number of security-allocation slices before grouping the remainder as Other.",
         ge=1,
         le=50,
+    )
+
+
+class DividendCalendarInput(PortfolioInput):
+    year: int | None = Field(
+        default=None,
+        description="Calendar year to show. Defaults to the current year.",
+        ge=1900,
+        le=2200,
+    )
+    month: int | None = Field(
+        default=None,
+        description="Optional initial month focus, 1-12.",
+        ge=1,
+        le=12,
+    )
+    holdings_limit: int = Field(
+        default=200,
+        description="Maximum holdings to include when matching dividend events.",
+        ge=1,
+        le=500,
     )
 
 
@@ -332,6 +360,32 @@ def myfund_portfolio_dashboard_widget() -> str:
     )
 
 
+@mcp.resource(
+    DIVIDEND_CALENDAR_RESOURCE_URI,
+    name="myfund_dividend_calendar_beta_widget",
+    title="myFund Dividend Calendar Beta Widget",
+    description="Interactive MCP App calendar for beta read-only dividend payment visualization.",
+    mime_type=RESOURCE_MIME_TYPE,
+    meta={
+        "ui": {
+            "prefersBorder": False,
+            "csp": {
+                "connectDomains": [],
+                "resourceDomains": [],
+                "baseUriDomains": [],
+            },
+        }
+    },
+)
+def myfund_dividend_calendar_beta_widget() -> str:
+    """Return the self-contained Dividend Calendar Beta widget."""
+    return (
+        resources.files("my_fund_app_mcp.widgets")
+        .joinpath("dividend_calendar.html")
+        .read_text(encoding="utf-8")
+    )
+
+
 @mcp.tool(
     name="myfund_show_portfolio_dashboard",
     title="Show myFund Portfolio Dashboard",
@@ -359,6 +413,35 @@ def myfund_show_portfolio_dashboard(params: DashboardInput) -> dict[str, Any]:
 def myfund_app_get_dashboard_data(params: DashboardInput) -> dict[str, Any]:
     """Return dashboard data for app-side refreshes."""
     return _dashboard_payload(params)
+
+
+@mcp.tool(
+    name="myfund_show_dividend_calendar",
+    title="Show myFund Dividend Calendar Beta",
+    description=(
+        "Open the Dividend Calendar Beta for read-only payment-date visualization from "
+        "optional user-provided JSON dividend events."
+    ),
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    meta={"ui": {"resourceUri": DIVIDEND_CALENDAR_RESOURCE_URI}},
+    structured_output=True,
+)
+def myfund_show_dividend_calendar(params: DividendCalendarInput) -> dict[str, Any]:
+    """Return Dividend Calendar Beta data and attach the interactive MCP App UI resource."""
+    return _dividend_calendar_payload(params)
+
+
+@mcp.tool(
+    name="myfund_app_get_dividend_calendar_data",
+    title="Refresh myFund Dividend Calendar Beta Data",
+    description="Refresh Dividend Calendar Beta data for the interactive app.",
+    annotations=READ_ONLY_OPEN_WORLD_ANNOTATIONS,
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def myfund_app_get_dividend_calendar_data(params: DividendCalendarInput) -> dict[str, Any]:
+    """Return Dividend Calendar Beta data for app-side refreshes."""
+    return _dividend_calendar_payload(params)
 
 
 def _dashboard_payload(params: DashboardInput) -> dict[str, Any]:
@@ -407,6 +490,258 @@ def _dashboard_payload(params: DashboardInput) -> dict[str, Any]:
         },
     }
     return payload
+
+
+def _dividend_calendar_payload(params: DividendCalendarInput) -> dict[str, Any]:
+    snapshot = _portfolio_snapshot(params)
+    year = params.year or date.today().year
+    holdings = [
+        holding
+        for holding in (snapshot["derived"]["holdings_sorted"] or [])
+        if isinstance(holding, dict) and _is_dividend_candidate(holding)
+    ][: params.holdings_limit]
+    source = _dividend_file_source()
+    events = _load_dividend_events(source["path"])
+    matched_events = _match_dividend_events(events, holdings, year)
+    monthly_totals = _monthly_dividend_totals(matched_events)
+    missing = _missing_dividend_data(holdings, matched_events)
+
+    return {
+        "meta": {
+            **snapshot["meta"],
+            "feature_label": "Dividend Calendar Beta",
+            "dividends_file_configured": source["configured"],
+            "dividends_file_path": source["display_path"],
+            "dividends_file_found": source["found"],
+        },
+        "status": snapshot["status"],
+        "inputs": {
+            "year": year,
+            "month": params.month,
+            "holdings_limit": params.holdings_limit,
+        },
+        "summary_text": (
+            "Dividend Calendar Beta uses optional user-provided JSON dividend events "
+            "and does not fetch or forecast dividends automatically."
+        ),
+        "calendar": {
+            "feature_label": "Dividend Calendar Beta",
+            "basis": "payment_date",
+            "events": matched_events,
+            "upcoming_payments": sorted(
+                matched_events,
+                key=lambda item: (item["payment_date"], item.get("ticker") or ""),
+            )[:20],
+            "monthly_totals": monthly_totals,
+            "missing_dividend_data": missing,
+            "visualizations": [
+                {
+                    "id": "payment_calendar",
+                    "title": "Dividend Calendar Beta payment dates",
+                    "chart_type": "calendar",
+                    "fields": ["events.payment_date", "events.estimated_gross_amount"],
+                },
+                {
+                    "id": "monthly_income",
+                    "title": "Dividend Calendar Beta monthly income totals",
+                    "chart_type": "monthly_totals",
+                    "fields": ["monthly_totals.month", "monthly_totals.totals_by_currency"],
+                },
+            ],
+        },
+        "analysis_boundary": {
+            "read_only": True,
+            "no_trade_execution": True,
+            "no_forecast_generation": True,
+            "note": (
+                "Dividend Calendar Beta visualizes user-provided dividend events only; "
+                "it does not trade, rebalance, mutate account data, or invent future payments."
+            ),
+        },
+    }
+
+
+def _dividend_file_source() -> dict[str, Any]:
+    raw_path = load_runtime_env().values.get("MYFUND_DIVIDENDS_FILE")
+    if not raw_path:
+        return {
+            "configured": False,
+            "path": None,
+            "display_path": None,
+            "found": False,
+        }
+
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = project_root() / path
+    return {
+        "configured": True,
+        "path": path if path.exists() else None,
+        "display_path": str(path),
+        "found": path.exists(),
+    }
+
+
+def _load_dividend_events(path: Path | None) -> list[dict[str, Any]]:
+    if path is None:
+        return []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise MyFundError(f"MYFUND_DIVIDENDS_FILE is not valid JSON: {exc}") from exc
+
+    events = data.get("events") if isinstance(data, dict) else None
+    if not isinstance(events, list):
+        raise MyFundError("MYFUND_DIVIDENDS_FILE must contain an object with an events list.")
+    return [_normalize_dividend_event(item, index) for index, item in enumerate(events, start=1)]
+
+
+def _normalize_dividend_event(item: Any, index: int) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        raise MyFundError(f"Dividend event #{index} must be an object.")
+
+    ticker = _required_string(item, "ticker", index).upper()
+    payment_date = _required_iso_date(item, "payment_date", index)
+    dividend_per_share = item.get("dividend_per_share")
+    if (
+        not isinstance(dividend_per_share, (int, float))
+        or isinstance(dividend_per_share, bool)
+        or dividend_per_share < 0
+    ):
+        raise MyFundError(f"Dividend event #{index} must include a nonnegative dividend_per_share number.")
+
+    currency = _required_string(item, "currency", index).upper()
+    ex_dividend_date = item.get("ex_dividend_date")
+    if ex_dividend_date not in {None, ""}:
+        ex_dividend_date = _required_iso_date(item, "ex_dividend_date", index)
+
+    return {
+        "ticker": ticker,
+        "name": _optional_string(item.get("name")),
+        "instrument_type": _optional_string(item.get("instrument_type")),
+        "ex_dividend_date": ex_dividend_date,
+        "payment_date": payment_date,
+        "dividend_per_share": float(dividend_per_share),
+        "currency": currency,
+        "status": _optional_string(item.get("status")) or "unknown",
+        "source": _optional_string(item.get("source")) or "user-json",
+    }
+
+
+def _required_string(item: dict[str, Any], field: str, index: int) -> str:
+    value = item.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise MyFundError(f"Dividend event #{index} must include a nonempty {field}.")
+    return value.strip()
+
+
+def _optional_string(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
+
+
+def _required_iso_date(item: dict[str, Any], field: str, index: int) -> str:
+    value = _required_string(item, field, index)
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise MyFundError(f"Dividend event #{index} has invalid {field}; expected YYYY-MM-DD.") from exc
+    return value
+
+
+def _match_dividend_events(
+    events: list[dict[str, Any]],
+    holdings: list[dict[str, Any]],
+    year: int,
+) -> list[dict[str, Any]]:
+    by_key: dict[str, dict[str, Any]] = {}
+    for holding in holdings:
+        for key in _holding_match_keys(holding):
+            by_key.setdefault(key, holding)
+
+    matched = []
+    for event in events:
+        if int(event["payment_date"][:4]) != year:
+            continue
+        holding = by_key.get(_match_key(event.get("ticker"))) or by_key.get(_match_key(event.get("name")))
+        units = holding.get("liczbaJednostek") if holding else None
+        units_number = units if isinstance(units, (int, float)) and not isinstance(units, bool) else None
+        estimated = (
+            round(units_number * event["dividend_per_share"], 2)
+            if units_number is not None
+            else None
+        )
+        matched.append(
+            {
+                **event,
+                "holding_id": holding.get("id") if holding else None,
+                "holding_name": (holding.get("nazwa") or holding.get("tickerClear")) if holding else None,
+                "units": units_number,
+                "estimated_gross_amount": estimated,
+                "matched_holding": holding is not None,
+            }
+        )
+    return sorted(matched, key=lambda item: (item["payment_date"], item["ticker"]))
+
+
+def _monthly_dividend_totals(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    months = [
+        {"month": month, "totals_by_currency": {}, "events_count": 0}
+        for month in range(1, 13)
+    ]
+    for event in events:
+        month = int(event["payment_date"][5:7])
+        bucket = months[month - 1]
+        bucket["events_count"] += 1
+        estimated = event.get("estimated_gross_amount")
+        if isinstance(estimated, (int, float)):
+            currency = event["currency"]
+            totals = bucket["totals_by_currency"]
+            totals[currency] = round(totals.get(currency, 0.0) + estimated, 2)
+    return months
+
+
+def _missing_dividend_data(
+    holdings: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    event_keys = {_match_key(event.get("ticker")) for event in events}
+    missing = []
+    for holding in holdings:
+        keys = _holding_match_keys(holding)
+        if keys and any(key in event_keys for key in keys):
+            continue
+        missing.append(_holding_view(holding))
+    return missing
+
+
+def _holding_match_keys(holding: dict[str, Any]) -> list[str]:
+    keys = []
+    for field in ("tickerClear", "nazwa"):
+        key = _match_key(holding.get(field))
+        if key:
+            keys.append(key)
+    return keys
+
+
+def _is_dividend_candidate(holding: dict[str, Any]) -> bool:
+    type_text = " ".join(
+        str(holding.get(field) or "").lower()
+        for field in ("typ", "typOrg", "instrument_type")
+    )
+    if any(marker in type_text for marker in ("cash", "gotow", "deposit", "lokata")):
+        return False
+    if any(marker in type_text for marker in ("stock", "akc", "etf", "fund", "fundusz")):
+        return True
+    return True
+
+
+def _match_key(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"[^A-Z0-9]", "", value.upper())
 
 
 def _summary_text(portfolio: dict[str, Any], derived: dict[str, Any]) -> str:
@@ -549,7 +884,8 @@ def myfund_portfolio_analysis(question: str) -> str:
         "Answer the user's myFund portfolio question using the myFund MCP app tools. "
         "Check status.code before analysis; status.code='0' means success and '7' means portfolio not found. "
         "Use direct API facts first, distinguish computed interpretation, and mention the documented 5-minute cache "
-        "when freshness matters. Use the dashboard widget when the user asks for a visual portfolio view. "
+        "when freshness matters. Use the dashboard widget when the user asks for a visual portfolio view, "
+        "or Dividend Calendar Beta when the user asks for dividend payment calendar visualization. "
         "Do not invent transaction history, trade actions, or account mutations.\n\n"
         f"Question: {question}"
     )

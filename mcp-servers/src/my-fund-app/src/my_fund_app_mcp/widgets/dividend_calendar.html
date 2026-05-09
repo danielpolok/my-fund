@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dividend Calendar Beta</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #667085;
+      --border: #d9dee7;
+      --accent: #136f63;
+      --accent-2: #3454d1;
+      --warn: #b7791f;
+      --soft: #eef7f4;
+    }
+    :root.dark {
+      color-scheme: dark;
+      --bg: #101418;
+      --panel: #171d24;
+      --text: #eef2f6;
+      --muted: #9aa7b5;
+      --border: #2d3642;
+      --soft: #162821;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .app { padding: 16px; max-width: 1180px; margin: 0 auto; }
+    .topbar {
+      display: flex;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+    h1, h2 { margin: 0; letter-spacing: 0; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 15px; }
+    .beta {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 8px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .subtitle, .note, .empty { color: var(--muted); }
+    .toolbar, .month-controls, .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    button, select {
+      min-height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 7px 10px;
+      font: inherit;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: .55; cursor: wait; }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(280px, .9fr);
+      gap: 12px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .dow, .day {
+      min-width: 0;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .dow:nth-child(7n), .day:nth-child(7n) { border-right: 0; }
+    .dow {
+      padding: 8px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .day {
+      min-height: 112px;
+      padding: 7px;
+      background: var(--panel);
+    }
+    .day.outside { background: transparent; color: var(--muted); }
+    .day-number { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+    .event {
+      width: 100%;
+      display: block;
+      margin: 4px 0 0;
+      padding: 5px 6px;
+      border: 1px solid rgba(19, 111, 99, .28);
+      border-radius: 6px;
+      background: var(--soft);
+      color: var(--text);
+      text-align: left;
+      overflow: hidden;
+    }
+    .event strong, .event span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .event span { color: var(--muted); font-size: 12px; }
+    .side-stack { display: grid; gap: 12px; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .kpi .label { color: var(--muted); font-size: 12px; }
+    .kpi .value { font-size: 22px; font-weight: 750; margin-top: 2px; }
+    .list { display: grid; gap: 8px; }
+    .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .row:last-child { border-bottom: 0; }
+    .row strong, .row span { display: block; }
+    .row span { color: var(--muted); font-size: 12px; }
+    .amount { font-weight: 750; text-align: right; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      white-space: nowrap;
+    }
+    th { color: var(--muted); font-size: 12px; }
+    .detail {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--soft);
+    }
+    .error { color: #b42318; }
+    @media (max-width: 860px) {
+      .topbar, .panel-head { flex-direction: column; }
+      .toolbar, .month-controls, .filters { width: 100%; justify-content: flex-start; }
+      .grid, .kpis { grid-template-columns: 1fr; }
+      .day { min-height: 92px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <div class="topbar">
+      <div>
+        <h1>Dividend Calendar <span class="beta">Beta</span></h1>
+        <div class="subtitle" id="subtitle">Waiting for dividend calendar data</div>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="refresh-button">Refresh</button>
+        <button type="button" id="expand-button">Full screen</button>
+      </div>
+    </div>
+
+    <section class="kpis" id="kpis"></section>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="month-title">Payment Calendar</h2>
+            <div class="note">Organized by payment date. Ex-dividend dates appear in event details.</div>
+          </div>
+          <div class="month-controls">
+            <button type="button" id="prev-month">Prev</button>
+            <select id="month-select" aria-label="Month"></select>
+            <select id="year-select" aria-label="Year"></select>
+            <button type="button" id="next-month">Next</button>
+          </div>
+        </div>
+        <div class="filters">
+          <select id="holding-filter" aria-label="Holding filter"></select>
+        </div>
+        <div class="calendar-grid" id="calendar"></div>
+        <div class="detail" id="detail">Select a dividend event to inspect payment details.</div>
+      </div>
+
+      <div class="side-stack">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Upcoming Payments</h2>
+              <div class="note">Next payment-date events for the selected year.</div>
+            </div>
+          </div>
+          <div class="list" id="upcoming"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Monthly Income</h2>
+              <div class="note">Estimated gross amount from matched holdings.</div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Month</th><th>Events</th><th>Totals</th></tr></thead>
+              <tbody id="monthly"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Missing Dividend Data</h2>
+              <div class="note">Holdings without beta JSON events for this year.</div>
+            </div>
+          </div>
+          <div class="list" id="missing"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    class TinyMcpApp {
+      constructor(info, capabilities, options) {
+        this.info = info;
+        this.capabilities = capabilities || {};
+        this.options = options || {};
+        this.nextId = 1;
+        this.pending = new Map();
+        this.hostContext = {};
+        this.ontoolresult = null;
+        this.ontoolinput = null;
+        this.ontoolinputpartial = null;
+        this.ontoolcancelled = null;
+        this.onhostcontextchanged = null;
+      }
+      async connect() {
+        window.addEventListener("message", (event) => this.handleMessage(event));
+        this.setupResizeObserver();
+        try {
+          const result = await this.request("ui/initialize", {
+            protocolVersion: "2026-01-26",
+            capabilities: this.capabilities,
+            clientInfo: this.info
+          });
+          this.mergeHostContext(result && (result.hostContext || result.host_context || result));
+          this.notify("ui/notifications/initialized", {});
+        } catch (error) {
+          this.notify("ui/notifications/initialized", {});
+        }
+      }
+      handleMessage(event) {
+        const message = event.data;
+        if (!message || message.jsonrpc !== "2.0") return;
+        if (Object.prototype.hasOwnProperty.call(message, "id") && (message.result || message.error)) {
+          const callbacks = this.pending.get(message.id);
+          if (!callbacks) return;
+          this.pending.delete(message.id);
+          if (message.error) callbacks.reject(new Error(message.error.message || "MCP app request failed"));
+          else callbacks.resolve(message.result);
+          return;
+        }
+        const params = message.params || {};
+        if (message.method === "ui/notifications/tool-result" && this.ontoolresult) this.ontoolresult(params);
+        else if (message.method === "ui/notifications/tool-input" && this.ontoolinput) this.ontoolinput(params);
+        else if (message.method === "ui/notifications/tool-input-partial" && this.ontoolinputpartial) this.ontoolinputpartial(params);
+        else if (message.method === "ui/notifications/tool-cancelled" && this.ontoolcancelled) this.ontoolcancelled(params);
+        else if (message.method === "ui/notifications/host-context-changed") this.mergeHostContext(params);
+        else if (message.method === "ui/resource-teardown" && message.id !== undefined) this.respond(message.id, {});
+      }
+      mergeHostContext(next) {
+        if (!next || typeof next !== "object") return;
+        this.hostContext = Object.assign({}, this.hostContext, next);
+        if (this.onhostcontextchanged) this.onhostcontextchanged(this.hostContext);
+      }
+      getHostContext() { return this.hostContext; }
+      requestDisplayMode(request) { return this.request("ui/request-display-mode", request); }
+      updateModelContext(context) { return this.request("ui/update-model-context", context); }
+      callServerTool(request) {
+        return this.request("tools/call", { name: request.name, arguments: request.arguments || {} });
+      }
+      request(method, params) {
+        const id = this.nextId++;
+        window.parent.postMessage({ jsonrpc: "2.0", id, method, params: params || {} }, "*");
+        return new Promise((resolve, reject) => {
+          this.pending.set(id, { resolve, reject });
+          window.setTimeout(() => {
+            if (!this.pending.has(id)) return;
+            this.pending.delete(id);
+            reject(new Error(method + " timed out"));
+          }, 8000);
+        });
+      }
+      notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params: params || {} }, "*"); }
+      respond(id, result) { window.parent.postMessage({ jsonrpc: "2.0", id, result: result || {} }, "*"); }
+      setupResizeObserver() {
+        if (!this.options.autoResize || typeof ResizeObserver === "undefined") return;
+        const sendSize = () => this.notify("ui/notifications/size-changed", {
+          width: Math.ceil(document.documentElement.getBoundingClientRect().width),
+          height: Math.ceil(document.documentElement.getBoundingClientRect().height)
+        });
+        new ResizeObserver(sendSize).observe(document.body);
+        window.setTimeout(sendSize, 30);
+      }
+    }
+
+    const app = new TinyMcpApp({ name: "Dividend Calendar Beta", version: "0.1.0" }, {}, { autoResize: true });
+    const state = { data: null, input: {}, month: null, year: null, filter: "all", busy: false };
+    const fmtNumber = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    const monthNames = Array.from({ length: 12 }, (_, index) => new Date(2026, index, 1).toLocaleDateString(undefined, { month: "long" }));
+    const dayNames = Array.from({ length: 7 }, (_, index) => new Date(2026, 5, index + 1).toLocaleDateString(undefined, { weekday: "short" }));
+
+    function extractPayload(result) {
+      if (!result) return null;
+      if (result.structuredContent && result.structuredContent.calendar) return result.structuredContent;
+      if (result.calendar) return result;
+      const textBlock = (result.content || []).find((item) => item.type === "text" && item.text);
+      if (!textBlock) return null;
+      try {
+        const parsed = JSON.parse(textBlock.text);
+        if (parsed.structuredContent && parsed.structuredContent.calendar) return parsed.structuredContent;
+        return parsed.calendar ? parsed : null;
+      } catch (error) {
+        return null;
+      }
+    }
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+    function money(value, currency) {
+      return typeof value === "number" ? fmtNumber.format(value) + " " + currency : "n/a";
+    }
+    function eventLabel(event) {
+      return event.ticker + " " + money(event.estimated_gross_amount, event.currency);
+    }
+    function currentParams() {
+      const raw = state.input && (state.input.params || state.input);
+      return Object.assign({ year: state.year, month: state.month, holdings_limit: 200 }, raw || {});
+    }
+    function setBusy(isBusy) {
+      state.busy = isBusy;
+      document.getElementById("refresh-button").disabled = isBusy;
+      document.getElementById("refresh-button").textContent = isBusy ? "Refreshing" : "Refresh";
+    }
+    function showError(message) {
+      document.getElementById("subtitle").innerHTML = '<span class="error">' + escapeHtml(message) + "</span>";
+      document.getElementById("kpis").innerHTML = "";
+      document.getElementById("calendar").innerHTML = "";
+      document.getElementById("upcoming").innerHTML = "";
+      document.getElementById("monthly").innerHTML = "";
+      document.getElementById("missing").innerHTML = "";
+    }
+    function applyHostContext(ctx) {
+      document.documentElement.classList.toggle("dark", ctx && ctx.theme === "dark");
+      const vars = ctx && ctx.styles && ctx.styles.variables;
+      if (vars) {
+        for (const [key, value] of Object.entries(vars)) document.documentElement.style.setProperty(key, value);
+      }
+    }
+    function render() {
+      if (!state.data || !state.data.calendar) return showError("No Dividend Calendar Beta payload was received yet.");
+      const inputs = state.data.inputs || {};
+      state.year = state.year || inputs.year || new Date().getFullYear();
+      state.month = state.month || inputs.month || new Date().getMonth() + 1;
+      renderHeader();
+      renderSelectors();
+      renderKpis();
+      renderCalendar();
+      renderUpcoming();
+      renderMonthly();
+      renderMissing();
+    }
+    function renderHeader() {
+      const meta = state.data.meta || {};
+      const status = state.data.status || {};
+      const source = meta.dividends_file_found ? "dividend JSON loaded" : "no dividend JSON loaded";
+      document.getElementById("subtitle").textContent =
+        "Portfolio " + (meta.portfolio || "default") + " . Status " + (status.code || "unknown") + " . " + source;
+    }
+    function renderSelectors() {
+      const monthSelect = document.getElementById("month-select");
+      monthSelect.innerHTML = monthNames.map((name, index) => (
+        '<option value="' + (index + 1) + '">' + escapeHtml(name) + "</option>"
+      )).join("");
+      monthSelect.value = String(state.month);
+      const year = Number((state.data.inputs || {}).year) || state.year;
+      document.getElementById("year-select").innerHTML = [year - 1, year, year + 1].map((item) => (
+        '<option value="' + item + '">' + item + "</option>"
+      )).join("");
+      document.getElementById("year-select").value = String(state.year);
+      const events = state.data.calendar.events || [];
+      const tickers = Array.from(new Set(events.map((event) => event.ticker))).sort();
+      document.getElementById("holding-filter").innerHTML =
+        '<option value="all">All holdings</option>' +
+        tickers.map((ticker) => '<option value="' + escapeHtml(ticker) + '">' + escapeHtml(ticker) + "</option>").join("");
+      document.getElementById("holding-filter").value = state.filter;
+      document.getElementById("month-title").textContent = monthNames[state.month - 1] + " " + state.year;
+    }
+    function filteredEvents() {
+      const events = state.data.calendar.events || [];
+      return state.filter === "all" ? events : events.filter((event) => event.ticker === state.filter);
+    }
+    function renderKpis() {
+      const events = filteredEvents();
+      const monthEvents = events.filter((event) => Number(event.payment_date.slice(5, 7)) === state.month);
+      const currencies = {};
+      events.forEach((event) => {
+        if (typeof event.estimated_gross_amount !== "number") return;
+        currencies[event.currency] = (currencies[event.currency] || 0) + event.estimated_gross_amount;
+      });
+      const totals = Object.entries(currencies).map(([currency, value]) => money(value, currency)).join(", ") || "n/a";
+      const items = [
+        ["Events", events.length, "selected year"],
+        ["This month", monthEvents.length, "payment dates"],
+        ["Estimated total", totals, "matched holdings"]
+      ];
+      document.getElementById("kpis").innerHTML = items.map((item) => (
+        '<div class="kpi"><div class="label">' + escapeHtml(item[0]) + '</div><div class="value">' +
+        escapeHtml(item[1]) + '</div><div class="note">' + escapeHtml(item[2]) + "</div></div>"
+      )).join("");
+    }
+    function renderCalendar() {
+      const first = new Date(state.year, state.month - 1, 1);
+      const daysInMonth = new Date(state.year, state.month, 0).getDate();
+      const offset = first.getDay();
+      const events = filteredEvents();
+      const byDay = {};
+      events.forEach((event) => {
+        const parts = event.payment_date.split("-").map(Number);
+        if (parts[0] === state.year && parts[1] === state.month) {
+          (byDay[parts[2]] = byDay[parts[2]] || []).push(event);
+        }
+      });
+      let html = dayNames.map((name) => '<div class="dow">' + escapeHtml(name) + "</div>").join("");
+      for (let index = 0; index < offset; index++) html += '<div class="day outside"></div>';
+      for (let day = 1; day <= daysInMonth; day++) {
+        html += '<div class="day"><div class="day-number">' + day + "</div>";
+        (byDay[day] || []).forEach((event, index) => {
+          html += '<button type="button" class="event" data-event-date="' + event.payment_date +
+            '" data-event-ticker="' + escapeHtml(event.ticker) + '" data-event-index="' + index + '">' +
+            '<strong>' + escapeHtml(event.ticker) + '</strong><span>' + escapeHtml(money(event.estimated_gross_amount, event.currency)) + "</span></button>";
+        });
+        html += "</div>";
+      }
+      document.getElementById("calendar").innerHTML = html;
+      document.querySelectorAll("[data-event-date]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const matches = events.filter((event) => event.payment_date === button.dataset.eventDate && event.ticker === button.dataset.eventTicker);
+          renderDetail(matches[Number(button.dataset.eventIndex)] || matches[0]);
+        });
+      });
+    }
+    function renderDetail(event) {
+      if (!event) return;
+      document.getElementById("detail").innerHTML =
+        '<strong>' + escapeHtml(event.name || event.holding_name || event.ticker) + " (" + escapeHtml(event.ticker) + ")</strong>" +
+        '<div class="note">Payment ' + escapeHtml(event.payment_date) +
+        (event.ex_dividend_date ? " . Ex-date " + escapeHtml(event.ex_dividend_date) : "") + "</div>" +
+        '<div>Dividend/share: ' + escapeHtml(money(event.dividend_per_share, event.currency)) + "</div>" +
+        '<div>Units: ' + escapeHtml(event.units == null ? "n/a" : fmtNumber.format(event.units)) + "</div>" +
+        '<div>Estimated gross: ' + escapeHtml(money(event.estimated_gross_amount, event.currency)) + "</div>" +
+        '<div class="note">Status ' + escapeHtml(event.status) + " . Source " + escapeHtml(event.source) + "</div>";
+    }
+    function renderUpcoming() {
+      const events = filteredEvents().slice().sort((a, b) => a.payment_date.localeCompare(b.payment_date)).slice(0, 8);
+      document.getElementById("upcoming").innerHTML = events.length ? events.map((event) => (
+        '<div class="row"><div><strong>' + escapeHtml(event.ticker) + '</strong><span>' +
+        escapeHtml(event.payment_date + " . " + (event.status || "unknown")) + '</span></div><div class="amount">' +
+        escapeHtml(money(event.estimated_gross_amount, event.currency)) + "</div></div>"
+      )).join("") : '<div class="empty">No dividend payment events configured for this view.</div>';
+    }
+    function renderMonthly() {
+      const rows = state.data.calendar.monthly_totals || [];
+      document.getElementById("monthly").innerHTML = rows.map((row) => {
+        const totals = Object.entries(row.totals_by_currency || {}).map(([currency, value]) => money(value, currency)).join(", ") || "n/a";
+        return '<tr><td>' + escapeHtml(monthNames[row.month - 1]) + '</td><td>' +
+          escapeHtml(row.events_count) + '</td><td>' + escapeHtml(totals) + "</td></tr>";
+      }).join("");
+    }
+    function renderMissing() {
+      const rows = (state.data.calendar.missing_dividend_data || []).slice(0, 10);
+      document.getElementById("missing").innerHTML = rows.length ? rows.map((item) => (
+        '<div class="row"><div><strong>' + escapeHtml(item.name || item.ticker || item.id) +
+        '</strong><span>' + escapeHtml(item.ticker || item.id || "no ticker") +
+        '</span></div><div class="amount">' + escapeHtml(item.units == null ? "n/a" : fmtNumber.format(item.units)) + "</div></div>"
+      )).join("") : '<div class="empty">All displayed holdings have beta dividend event data.</div>';
+    }
+    async function refresh() {
+      if (state.busy) return;
+      setBusy(true);
+      try {
+        const result = await app.callServerTool({
+          name: "myfund_app_get_dividend_calendar_data",
+          arguments: { params: currentParams() }
+        });
+        const payload = extractPayload(result);
+        if (!payload) throw new Error("Dividend Calendar Beta refresh returned an unrecognized payload.");
+        state.data = payload;
+        app.updateModelContext({
+          content: [{ type: "text", text: "Visible Dividend Calendar Beta: year=" + payload.inputs.year + ", events=" + payload.calendar.events.length + "." }]
+        });
+        render();
+      } catch (error) {
+        showError(error.message || "Dividend Calendar Beta refresh failed.");
+      } finally {
+        setBusy(false);
+      }
+    }
+    function installHandlers() {
+      document.getElementById("refresh-button").addEventListener("click", refresh);
+      document.getElementById("expand-button").addEventListener("click", () => app.requestDisplayMode({ mode: "fullscreen" }));
+      document.getElementById("prev-month").addEventListener("click", () => {
+        state.month -= 1;
+        if (state.month < 1) { state.month = 12; state.year -= 1; }
+        refresh();
+      });
+      document.getElementById("next-month").addEventListener("click", () => {
+        state.month += 1;
+        if (state.month > 12) { state.month = 1; state.year += 1; }
+        refresh();
+      });
+      document.getElementById("month-select").addEventListener("change", (event) => {
+        state.month = Number(event.target.value);
+        render();
+      });
+      document.getElementById("year-select").addEventListener("change", (event) => {
+        state.year = Number(event.target.value);
+        refresh();
+      });
+      document.getElementById("holding-filter").addEventListener("change", (event) => {
+        state.filter = event.target.value;
+        render();
+      });
+    }
+    function loadPreviewPayload() {
+      const payload = new URLSearchParams(window.location.search).get("payload");
+      if (!payload) return null;
+      try { return JSON.parse(payload); } catch (error) { return null; }
+    }
+
+    app.ontoolinput = ({ arguments: args }) => { state.input = args || {}; };
+    app.ontoolinputpartial = ({ arguments: args }) => { state.input = args || state.input; };
+    app.ontoolresult = (result) => {
+      const payload = extractPayload(result);
+      if (!payload) return showError("The Dividend Calendar Beta tool returned data this widget could not read.");
+      state.data = payload;
+      render();
+    };
+    app.ontoolcancelled = () => showError("The Dividend Calendar Beta tool call was cancelled.");
+    app.onhostcontextchanged = applyHostContext;
+    installHandlers();
+    const preview = loadPreviewPayload();
+    if (preview) {
+      state.data = preview;
+      state.input = preview.inputs ? { params: preview.inputs } : {};
+      render();
+    }
+    app.connect().then(() => applyHostContext(app.getHostContext()));
+  </script>
+</body>
+</html>

@@ -17,6 +17,9 @@ The app can visualize the chartable parts of the normalized myFund payload:
 - Largest holdings by market value and portfolio weight.
 - Top gainers and losers by profit.
 - Summary KPI tiles for value, profit, daily change, MTD return, YTD return, and holding count.
+- Dividend Calendar Beta payment-date view from optional user-provided JSON dividend events.
+
+Dividend Calendar Beta uses optional user-provided JSON dividend events and does not fetch or forecast dividends automatically.
 
 ## Tools
 
@@ -28,6 +31,8 @@ The app can visualize the chartable parts of the normalized myFund payload:
 - `myfund_get_performance`: return period return metrics and time-series performance data.
 - `myfund_show_portfolio_dashboard`: opens the interactive dashboard and returns the dashboard JSON payload.
 - `myfund_app_get_dashboard_data`: app-only helper used by the widget to refresh or switch time windows.
+- `myfund_show_dividend_calendar`: opens the Dividend Calendar Beta widget and returns calendar JSON payload.
+- `myfund_app_get_dividend_calendar_data`: app-only helper used by the widget to refresh dividend calendar data.
 
 All tools are read-only. The myFund API may cache identical requests for 5 minutes.
 
@@ -45,6 +50,7 @@ Optional:
 - `MYFUND_PORTFOLIO`: compatibility alias for `MYFUND_PORTFEL`
 - `MYFUND_API_BASE_URL`: defaults to `https://myfund.pl/API/v1`
 - `MYFUND_ALLOW_CUSTOM_API_BASE_URL`: set to `true` only for a controlled test or staging endpoint outside `myfund.pl`
+- `MYFUND_DIVIDENDS_FILE`: optional beta path to a local JSON file with dividend events
 - `MY_FUND_MCP_TRANSPORT`: `stdio`, `streamable-http`, or `sse`; defaults to `stdio`
 - `MY_FUND_MCP_MAX_REQUESTS_PER_MINUTE`: per-process myFund API call limit; defaults to `30`
 
@@ -54,6 +60,42 @@ Environment variables take precedence. If not exported, the app also checks:
 2. `skills/my-fund/.env`
 
 `MYFUND_API_BASE_URL` must use `https://` and point to `myfund.pl` unless `MYFUND_ALLOW_CUSTOM_API_BASE_URL=true` is explicitly set.
+
+## Dividend Calendar Beta
+
+Dividend Calendar Beta is read-only. It joins optional local dividend events to the live myFund holdings snapshot by ticker or name, then shows payment dates, ex-dividend dates, estimated gross amounts, and holdings missing dividend data. It does not call any dividend provider, predict future dividends, calculate tax, reinvest, trade, rebalance, or mutate upstream data.
+
+Example beta fixture:
+
+```bash
+mcp-servers/src/my-fund-app/examples/mock_dividend_payments_2026.json
+```
+
+Set it for local testing:
+
+```bash
+MYFUND_DIVIDENDS_FILE=mcp-servers/src/my-fund-app/examples/mock_dividend_payments_2026.json uv run my-fund-app-mcp
+```
+
+JSON shape:
+
+```json
+{
+  "events": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "instrument_type": "stock",
+      "ex_dividend_date": "2026-05-10",
+      "payment_date": "2026-05-21",
+      "dividend_per_share": 0.26,
+      "currency": "USD",
+      "status": "confirmed",
+      "source": "mock-beta"
+    }
+  ]
+}
+```
 
 ## Run
 
@@ -81,7 +123,7 @@ Streamable HTTP is local-development only unless authentication, network control
 4. Run repository validation from the repo root:
 
 ```bash
-python3 scripts/validate_release.py
+uv run python scripts/validate_release.py
 ```
 
 Then authenticate and publish with `mcp-publisher` from this directory.

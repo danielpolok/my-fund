@@ -1,24 +1,33 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from my_fund_app_mcp.server import (
     AllocationInput,
     DASHBOARD_RESOURCE_URI,
+    DIVIDEND_CALENDAR_RESOURCE_URI,
+    DividendCalendarInput,
     HoldingSort,
     ListHoldingsInput,
+    MyFundError,
     PerformanceInput,
     PortfolioInput,
     RESOURCE_MIME_TYPE,
     DashboardInput,
     _dashboard_payload,
+    _dividend_calendar_payload,
     mcp,
     myfund_get_allocations,
     myfund_get_performance,
     myfund_get_portfolio_summary,
     myfund_list_holdings,
+    myfund_dividend_calendar_beta_widget,
     myfund_portfolio_dashboard_widget,
 )
 
@@ -35,6 +44,8 @@ class AppServerContractTests(unittest.TestCase):
             "myfund_get_performance",
             "myfund_show_portfolio_dashboard",
             "myfund_app_get_dashboard_data",
+            "myfund_show_dividend_calendar",
+            "myfund_app_get_dividend_calendar_data",
         }
 
         self.assertEqual(set(tools), expected_tools)
@@ -48,6 +59,18 @@ class AppServerContractTests(unittest.TestCase):
         )
         self.assertEqual(
             tools["myfund_app_get_dashboard_data"].meta["ui"]["visibility"],
+            ["app"],
+        )
+        self.assertEqual(
+            tools["myfund_show_dividend_calendar"].title,
+            "Show myFund Dividend Calendar Beta",
+        )
+        self.assertEqual(
+            tools["myfund_show_dividend_calendar"].meta["ui"]["resourceUri"],
+            DIVIDEND_CALENDAR_RESOURCE_URI,
+        )
+        self.assertEqual(
+            tools["myfund_app_get_dividend_calendar_data"].meta["ui"]["visibility"],
             ["app"],
         )
         for tool in tools.values():
@@ -68,10 +91,15 @@ class AppServerContractTests(unittest.TestCase):
         resources = {str(resource.uri): resource for resource in asyncio.run(mcp.list_resources())}
 
         self.assertIn(DASHBOARD_RESOURCE_URI, resources)
+        self.assertIn(DIVIDEND_CALENDAR_RESOURCE_URI, resources)
         resource = resources[DASHBOARD_RESOURCE_URI]
         self.assertEqual(resource.mimeType, RESOURCE_MIME_TYPE)
         self.assertFalse(resource.meta["ui"]["prefersBorder"])
         self.assertEqual(resource.meta["ui"]["csp"]["connectDomains"], [])
+        dividend_resource = resources[DIVIDEND_CALENDAR_RESOURCE_URI]
+        self.assertEqual(dividend_resource.mimeType, RESOURCE_MIME_TYPE)
+        self.assertFalse(dividend_resource.meta["ui"]["prefersBorder"])
+        self.assertEqual(dividend_resource.meta["ui"]["csp"]["connectDomains"], [])
 
     def test_widget_html_uses_mcp_app_lifecycle_without_external_assets(self) -> None:
         html = myfund_portfolio_dashboard_widget()
@@ -79,6 +107,17 @@ class AppServerContractTests(unittest.TestCase):
         self.assertIn("ui/initialize", html)
         self.assertIn("ui/notifications/tool-result", html)
         self.assertIn("myfund_app_get_dashboard_data", html)
+        self.assertNotIn("https://", html)
+        self.assertNotIn("http://", html)
+
+    def test_dividend_calendar_widget_html_uses_mcp_app_lifecycle_without_external_assets(self) -> None:
+        html = myfund_dividend_calendar_beta_widget()
+
+        self.assertIn("Dividend Calendar", html)
+        self.assertIn("Beta", html)
+        self.assertIn("ui/initialize", html)
+        self.assertIn("ui/notifications/tool-result", html)
+        self.assertIn("myfund_app_get_dividend_calendar_data", html)
         self.assertNotIn("https://", html)
         self.assertNotIn("http://", html)
 
@@ -94,6 +133,97 @@ class AppServerContractTests(unittest.TestCase):
         self.assertIn("portfolio_value_history", chart_ids)
         self.assertIn("return_vs_benchmark", chart_ids)
         self.assertIn("allocation_by_security", chart_ids)
+
+    def test_dividend_calendar_payload_joins_events_to_holdings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dividend_file = Path(tmp) / "dividends.json"
+            dividend_file.write_text(
+                json.dumps(
+                    {
+                        "events": [
+                            {
+                                "ticker": "AAPL",
+                                "name": "Apple Inc.",
+                                "instrument_type": "stock",
+                                "ex_dividend_date": "2026-05-10",
+                                "payment_date": "2026-05-21",
+                                "dividend_per_share": 0.26,
+                                "currency": "USD",
+                                "status": "confirmed",
+                                "source": "mock-beta",
+                            },
+                            {
+                                "ticker": "MSFT",
+                                "payment_date": "2027-06-11",
+                                "dividend_per_share": 0.83,
+                                "currency": "USD",
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_dividend_snapshot()),
+                patch(
+                    "my_fund_app_mcp.server.load_runtime_env",
+                    return_value=SimpleNamespace(values={"MYFUND_DIVIDENDS_FILE": str(dividend_file)}),
+                ),
+            ):
+                payload = _dividend_calendar_payload(DividendCalendarInput(year=2026, month=5))
+
+        calendar = payload["calendar"]
+        self.assertEqual(payload["meta"]["feature_label"], "Dividend Calendar Beta")
+        self.assertTrue(payload["meta"]["dividends_file_found"])
+        self.assertEqual(len(calendar["events"]), 1)
+        self.assertEqual(calendar["events"][0]["ticker"], "AAPL")
+        self.assertEqual(calendar["events"][0]["units"], 10)
+        self.assertEqual(calendar["events"][0]["estimated_gross_amount"], 2.6)
+        self.assertEqual(calendar["monthly_totals"][4]["totals_by_currency"], {"USD": 2.6})
+        missing_tickers = {item["ticker"] for item in calendar["missing_dividend_data"]}
+        self.assertIn("MSFT", missing_tickers)
+
+    def test_dividend_calendar_payload_without_file_returns_missing_data(self) -> None:
+        with (
+            patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_dividend_snapshot()),
+            patch(
+                "my_fund_app_mcp.server.load_runtime_env",
+                return_value=SimpleNamespace(values={}),
+            ),
+        ):
+            payload = _dividend_calendar_payload(DividendCalendarInput(year=2026))
+
+        self.assertFalse(payload["meta"]["dividends_file_configured"])
+        self.assertEqual(payload["calendar"]["events"], [])
+        self.assertGreaterEqual(len(payload["calendar"]["missing_dividend_data"]), 2)
+
+    def test_dividend_calendar_rejects_invalid_event_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dividend_file = Path(tmp) / "dividends.json"
+            dividend_file.write_text(
+                json.dumps(
+                    {
+                        "events": [
+                            {
+                                "ticker": "AAPL",
+                                "payment_date": "2026/05/21",
+                                "dividend_per_share": "0.26",
+                                "currency": "USD",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_dividend_snapshot()),
+                patch(
+                    "my_fund_app_mcp.server.load_runtime_env",
+                    return_value=SimpleNamespace(values={"MYFUND_DIVIDENDS_FILE": str(dividend_file)}),
+                ),
+            ):
+                with self.assertRaises(MyFundError):
+                    _dividend_calendar_payload(DividendCalendarInput(year=2026))
 
     def test_basic_summary_tool_matches_myfund_mcp_capability(self) -> None:
         with patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_snapshot()):
@@ -246,6 +376,43 @@ def _sample_snapshot() -> dict[str, object]:
             "benchmark_delta": [0.2, 0.4],
         },
     }
+
+
+def _sample_dividend_snapshot() -> dict[str, object]:
+    snapshot = _sample_snapshot()
+    snapshot["holdings"] = [
+        {
+            "id": "apple",
+            "nazwa": "Apple Inc.",
+            "tickerClear": "AAPL",
+            "wartosc": 700,
+            "udzial": 70,
+            "zysk": 90,
+            "zmiana": 12,
+            "liczbaJednostek": 10,
+        },
+        {
+            "id": "microsoft",
+            "nazwa": "Microsoft Corporation",
+            "tickerClear": "MSFT",
+            "wartosc": 300,
+            "udzial": 30,
+            "zysk": 0,
+            "zmiana": 0,
+            "liczbaJednostek": 5,
+            "typ": "stock",
+        },
+        {
+            "id": "cash",
+            "nazwa": "Cash Holding",
+            "tickerClear": "CASH",
+            "wartosc": 25,
+            "udzial": 2.5,
+            "typ": "cash",
+        },
+    ]
+    snapshot["derived"]["holdings_sorted"] = list(snapshot["holdings"])
+    return snapshot
 
 
 if __name__ == "__main__":
