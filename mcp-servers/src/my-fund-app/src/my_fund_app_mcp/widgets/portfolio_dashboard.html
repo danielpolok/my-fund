@@ -207,6 +207,34 @@
       flex-wrap: wrap;
     }
 
+    .dashboard-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .dashboard-tabs button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .dashboard-tabs button.active {
+      color: var(--ink);
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+      background: var(--soft);
+    }
+
+    .dashboard-view[hidden] {
+      display: none;
+    }
+
     .chart-tabs button {
       min-height: 28px;
       border: 1px solid var(--line);
@@ -324,7 +352,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 620px;
+      min-width: 980px;
     }
 
     th,
@@ -383,6 +411,32 @@
       padding: 12px 14px 14px;
     }
 
+    .period-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px 14px 14px;
+    }
+
+    .period-item {
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+    }
+
+    .period-label {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .period-value {
+      margin-top: 4px;
+      font-size: 16px;
+      font-weight: 750;
+    }
+
     .mover-col {
       min-width: 0;
     }
@@ -411,6 +465,10 @@
       .grid {
         grid-template-columns: 1fr;
       }
+      .dashboard-tabs,
+      .period-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
       .toolbar {
         justify-content: flex-start;
       }
@@ -424,7 +482,9 @@
         padding: 10px;
       }
       .kpis,
-      .movers {
+      .movers,
+      .dashboard-tabs,
+      .period-grid {
         grid-template-columns: 1fr;
       }
       .panel-head {
@@ -457,28 +517,59 @@
       </div>
     </div>
 
-    <section class="kpis" id="kpis"></section>
+    <nav class="dashboard-tabs" id="dashboard-tabs" aria-label="Named dashboards">
+      <button type="button" data-dashboard="portfolio" class="active">Portfolio</button>
+      <button type="button" data-dashboard="holdings">Holdings</button>
+      <button type="button" data-dashboard="allocation">Allocation</button>
+      <button type="button" data-dashboard="performance">Performance</button>
+    </nav>
 
-    <section class="grid">
-      <div class="panel">
+    <section class="dashboard-view" data-dashboard-view="portfolio">
+      <section class="kpis" id="kpis"></section>
+      <section class="panel">
         <div class="panel-head">
           <div>
-            <h2 id="chart-title">Performance</h2>
-            <div class="panel-note" id="chart-note">Value, capital, profit, and benchmark series.</div>
-          </div>
-          <div class="chart-tabs" aria-label="Chart mode">
-            <button type="button" data-chart="value" class="active">Value</button>
-            <button type="button" data-chart="return">Return</button>
-            <button type="button" data-chart="delta">Delta</button>
+            <h2>Portfolio</h2>
+            <div class="panel-note">Summary KPIs and profit-ranked movers.</div>
           </div>
         </div>
-        <div class="chart-wrap">
-          <svg id="chart" viewBox="0 0 760 300" role="img" aria-label="Portfolio chart"></svg>
-        </div>
-        <div class="legend" id="legend"></div>
-      </div>
+        <div class="movers" id="movers"></div>
+      </section>
+    </section>
 
-      <div class="side-stack">
+    <section class="dashboard-view" data-dashboard-view="holdings" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Holdings</h2>
+            <div class="panel-note">Top holdings by market value.</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Holding</th>
+                <th>Value</th>
+                <th>Weight</th>
+                <th>Profit</th>
+                <th>Return</th>
+                <th>Daily</th>
+                <th>Units</th>
+                <th>Purchase</th>
+                <th>Current</th>
+                <th>Days</th>
+                <th>Ask</th>
+              </tr>
+            </thead>
+            <tbody id="holdings"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="dashboard-view" data-dashboard-view="allocation" hidden>
+      <div class="grid">
         <div class="panel">
           <div class="panel-head">
             <div>
@@ -496,37 +587,45 @@
         <div class="panel">
           <div class="panel-head">
             <div>
-              <h2>Movers</h2>
-              <div class="panel-note">Profit-ranked holdings.</div>
+              <h2>Allocation Detail</h2>
+              <div class="panel-note">Switch between asset type and security exposure.</div>
             </div>
           </div>
-          <div class="movers" id="movers"></div>
+          <div class="alloc-list" id="allocation-detail"></div>
         </div>
       </div>
     </section>
 
-    <section class="panel" style="margin-top:12px">
-      <div class="panel-head">
-        <div>
-          <h2>Holdings</h2>
-          <div class="panel-note">Top holdings by market value.</div>
+    <section class="dashboard-view" data-dashboard-view="performance" hidden>
+      <section class="grid">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 id="chart-title">Performance</h2>
+              <div class="panel-note" id="chart-note">Value, capital, profit, and benchmark series.</div>
+            </div>
+            <div class="chart-tabs" aria-label="Chart mode">
+              <button type="button" data-chart="value" class="active">Value</button>
+              <button type="button" data-chart="return">Return</button>
+              <button type="button" data-chart="delta">Delta</button>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <svg id="chart" viewBox="0 0 760 300" role="img" aria-label="Portfolio chart"></svg>
+          </div>
+          <div class="legend" id="legend"></div>
         </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Holding</th>
-              <th>Value</th>
-              <th>Weight</th>
-              <th>Profit</th>
-              <th>Return</th>
-              <th>Ask</th>
-            </tr>
-          </thead>
-          <tbody id="holdings"></tbody>
-        </table>
-      </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Period Returns</h2>
+              <div class="panel-note" id="period-note">Named return windows from myFund.</div>
+            </div>
+          </div>
+          <div class="period-grid" id="period-returns"></div>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -669,6 +768,7 @@
     const state = {
       data: null,
       input: {},
+      activeDashboard: "portfolio",
       chart: "value",
       allocation: "type",
       busy: false
@@ -706,10 +806,17 @@
     function currentParams() {
       const raw = state.input && (state.input.params || state.input);
       return Object.assign({
+        dashboard: "portfolio",
         window: "full",
         holdings_limit: 12,
         allocation_security_limit: 12
       }, raw || {});
+    }
+
+    function dashboardName(id) {
+      const dashboards = (state.data && state.data.dashboards) || [];
+      const match = dashboards.find((item) => item.id === id);
+      return match ? match.name : String(id || "portfolio");
     }
 
     function extractPayload(result) {
@@ -749,8 +856,10 @@
       document.getElementById("chart").innerHTML = "";
       document.getElementById("legend").innerHTML = "";
       document.getElementById("allocation").innerHTML = '<div class="error">' + escapeHtml(message) + "</div>";
+      document.getElementById("allocation-detail").innerHTML = "";
       document.getElementById("movers").innerHTML = "";
       document.getElementById("holdings").innerHTML = "";
+      document.getElementById("period-returns").innerHTML = "";
     }
 
     function escapeHtml(value) {
@@ -766,12 +875,16 @@
         showError("No dashboard payload was received yet.");
         return;
       }
+      state.activeDashboard = (state.data.inputs && state.data.inputs.dashboard) || state.data.active_dashboard || currentParams().dashboard;
       renderHeader();
+      renderDashboardTabs();
+      renderActiveDashboard();
       renderKpis();
       renderChart();
       renderAllocation();
       renderMovers();
       renderHoldings();
+      renderPeriodReturns();
     }
 
     function renderHeader() {
@@ -788,6 +901,41 @@
       document.querySelectorAll("[data-window]").forEach((button) => {
         button.classList.toggle("active", button.dataset.window === inputs.window);
       });
+    }
+
+    function renderDashboardTabs() {
+      const configured = state.data.dashboards || [];
+      const dashboards = configured.length ? configured : [
+        { id: "portfolio", name: "Portfolio" },
+        { id: "holdings", name: "Holdings" },
+        { id: "allocation", name: "Allocation" },
+        { id: "performance", name: "Performance" }
+      ];
+      document.getElementById("dashboard-tabs").innerHTML = dashboards.map((item) => (
+        '<button type="button" data-dashboard="' + escapeHtml(item.id) + '"' +
+          (item.id === state.activeDashboard ? ' class="active"' : "") + '>' +
+          escapeHtml(item.name) +
+        '</button>'
+      )).join("");
+      document.querySelectorAll("[data-dashboard]").forEach((button) => {
+        button.addEventListener("click", () => switchDashboard(button.dataset.dashboard));
+      });
+    }
+
+    function renderActiveDashboard() {
+      document.querySelectorAll("[data-dashboard-view]").forEach((view) => {
+        view.hidden = view.dataset.dashboardView !== state.activeDashboard;
+      });
+      document.querySelectorAll("[data-dashboard]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.dashboard === state.activeDashboard);
+      });
+    }
+
+    function switchDashboard(dashboardId) {
+      state.activeDashboard = dashboardId || "portfolio";
+      state.input = { params: Object.assign({}, currentParams(), { dashboard: state.activeDashboard }) };
+      renderActiveDashboard();
+      updateVisibleModelContext();
     }
 
     function renderKpis() {
@@ -951,6 +1099,7 @@
         '</div>';
       }).join("") : '<div class="empty">No allocation data available.</div>';
       document.getElementById("allocation").innerHTML = html;
+      document.getElementById("allocation-detail").innerHTML = html;
     }
 
     function renderMovers() {
@@ -984,9 +1133,14 @@
           '<td>' + pctText(item.weight_pct) + '</td>' +
           '<td class="' + signedClass(item.profit) + '">' + valueText(item.profit) + '</td>' +
           '<td class="' + signedClass(item.return_pct) + '">' + pctText(item.return_pct) + '</td>' +
+          '<td class="' + signedClass(item.daily_change_pct) + '">' + pctText(item.daily_change_pct) + '</td>' +
+          '<td>' + valueText(item.units) + '</td>' +
+          '<td>' + valueText(item.purchase_price) + '</td>' +
+          '<td>' + valueText(item.current_price) + '</td>' +
+          '<td>' + valueText(item.investment_days) + '</td>' +
           '<td><button class="ask-button" type="button" data-holding-index="' + index + '">Ask</button></td>' +
         '</tr>'
-      )).join("") : '<tr><td colspan="6" class="empty">No holdings data available.</td></tr>';
+      )).join("") : '<tr><td colspan="11" class="empty">No holdings data available.</td></tr>';
       document.querySelectorAll("[data-holding-index]").forEach((button) => {
         button.addEventListener("click", () => {
           const item = rows[Number(button.dataset.holdingIndex)];
@@ -1001,6 +1155,28 @@
       });
     }
 
+    function renderPeriodReturns() {
+      const returns = (state.data.dashboard && state.data.dashboard.period_returns) || {};
+      const items = [
+        ["1W", returns["1w_pct"]],
+        ["2W", returns["2w_pct"]],
+        ["1M", returns["1m_pct"]],
+        ["3M", returns["3m_pct"]],
+        ["6M", returns["6m_pct"]],
+        ["1Y", returns["1y_pct"]],
+        ["3Y", returns["3y_pct"]],
+        ["5Y", returns["5y_pct"]],
+        ["MTD", returns["mtd_pct"]],
+        ["YTD", returns["ytd_pct"]]
+      ];
+      document.getElementById("period-returns").innerHTML = items.map((item) => (
+        '<div class="period-item">' +
+          '<div class="period-label">' + escapeHtml(item[0]) + '</div>' +
+          '<div class="period-value ' + signedClass(item[1]) + '">' + pctText(item[1]) + '</div>' +
+        '</div>'
+      )).join("");
+    }
+
     function shortDate(value) {
       if (!value) return "";
       const date = new Date(value);
@@ -1009,10 +1185,14 @@
     }
 
     async function refreshWithWindow(windowName) {
+      return refreshWithParams({ window: windowName || currentParams().window });
+    }
+
+    async function refreshWithParams(overrides) {
       if (state.busy) return;
       setBusy(true);
       try {
-        const params = Object.assign({}, currentParams(), { window: windowName || currentParams().window });
+        const params = Object.assign({}, currentParams(), { dashboard: state.activeDashboard }, overrides || {});
         const result = await app.callServerTool({
           name: "myfund_app_get_dashboard_data",
           arguments: { params }
@@ -1021,14 +1201,8 @@
         if (!payload) throw new Error("Dashboard refresh returned an unrecognized payload.");
         state.data = payload;
         state.input = { params };
-        app.updateModelContext({
-          content: [{
-            type: "text",
-            text: "Visible myFund dashboard: window=" + params.window +
-              ", fetched_at_utc=" + ((payload.meta && payload.meta.fetched_at_utc) || "unknown") + "."
-          }]
-        });
         render();
+        updateVisibleModelContext();
       } catch (error) {
         showError(error.message || "Dashboard refresh failed.");
       } finally {
@@ -1036,9 +1210,25 @@
       }
     }
 
+    function updateVisibleModelContext() {
+      if (!state.data) return;
+      const params = Object.assign({}, currentParams(), { dashboard: state.activeDashboard });
+      app.updateModelContext({
+        content: [{
+          type: "text",
+          text: "Visible myFund dashboard: dashboard=" + dashboardName(params.dashboard) +
+            ", window=" + params.window +
+            ", fetched_at_utc=" + ((state.data.meta && state.data.meta.fetched_at_utc) || "unknown") + "."
+        }]
+      });
+    }
+
     function installHandlers() {
       document.querySelectorAll("[data-window]").forEach((button) => {
         button.addEventListener("click", () => refreshWithWindow(button.dataset.window));
+      });
+      document.querySelectorAll("[data-dashboard]").forEach((button) => {
+        button.addEventListener("click", () => switchDashboard(button.dataset.dashboard));
       });
       document.querySelectorAll("[data-chart]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -1081,6 +1271,7 @@
       }
       state.data = payload;
       render();
+      updateVisibleModelContext();
     };
     app.ontoolcancelled = () => showError("The dashboard tool call was cancelled.");
     app.onhostcontextchanged = applyHostContext;

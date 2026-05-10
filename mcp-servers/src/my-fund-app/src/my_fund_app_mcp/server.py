@@ -121,6 +121,13 @@ class PerformanceWindow(str, Enum):
     MONTH_TO_DATE = "month_to_date"
 
 
+class DashboardName(str, Enum):
+    PORTFOLIO = "portfolio"
+    HOLDINGS = "holdings"
+    ALLOCATION = "allocation"
+    PERFORMANCE = "performance"
+
+
 class PerformanceInput(PortfolioInput):
     window: PerformanceWindow = Field(
         default=PerformanceWindow.FULL,
@@ -129,6 +136,10 @@ class PerformanceInput(PortfolioInput):
 
 
 class DashboardInput(PortfolioInput):
+    dashboard: DashboardName = Field(
+        default=DashboardName.PORTFOLIO,
+        description="Named dashboard to show: portfolio, holdings, allocation, or performance.",
+    )
     window: PerformanceWindow = Field(
         default=PerformanceWindow.FULL,
         description="Performance window to visualize: full or month_to_date.",
@@ -458,11 +469,14 @@ def _dashboard_payload(params: DashboardInput) -> dict[str, Any]:
         "meta": snapshot["meta"],
         "status": snapshot["status"],
         "inputs": {
+            "dashboard": params.dashboard.value,
             "window": params.window.value,
             "holdings_limit": params.holdings_limit,
             "allocation_security_limit": params.allocation_security_limit,
         },
         "summary_text": _summary_text(portfolio, derived),
+        "dashboards": _dashboard_catalog(),
+        "active_dashboard": params.dashboard.value,
         "dashboard": {
             "latest": derived["latest"],
             "period_returns": _period_returns(portfolio),
@@ -482,6 +496,33 @@ def _dashboard_payload(params: DashboardInput) -> dict[str, Any]:
             "top_gainers": [_holding_view(item) for item in derived["top_gainers"]],
             "top_losers": [_holding_view(item) for item in derived["top_losers"]],
             "visualizations": _visualization_catalog(),
+            "views": {
+                "portfolio": {
+                    "latest": derived["latest"],
+                    "top_gainers": [_holding_view(item) for item in derived["top_gainers"]],
+                    "top_losers": [_holding_view(item) for item in derived["top_losers"]],
+                },
+                "holdings": {
+                    "holdings": holdings,
+                },
+                "allocation": {
+                    "allocation_by_type": _collapse_allocation(
+                        derived["allocation_by_type"],
+                        params.allocation_security_limit,
+                        value_key="value",
+                    ),
+                    "allocation_by_security": _collapse_allocation(
+                        derived["allocation_by_security"],
+                        params.allocation_security_limit,
+                        value_key="share_pct",
+                    ),
+                },
+                "performance": {
+                    "period_returns": _period_returns(portfolio),
+                    "benchmark_name": portfolio.get("benchName"),
+                    "history": history,
+                },
+            },
         },
         "analysis_boundary": {
             "read_only": True,
@@ -771,6 +812,31 @@ def _period_returns(portfolio: dict[str, Any]) -> dict[str, Any]:
         "mtd_pct": portfolio.get("zmianaMdD"),
         "ytd_pct": portfolio.get("zmianaRdD"),
     }
+
+
+def _dashboard_catalog() -> list[dict[str, str]]:
+    return [
+        {
+            "id": DashboardName.PORTFOLIO.value,
+            "name": "Portfolio",
+            "description": "Summary KPIs and profit-ranked movers.",
+        },
+        {
+            "id": DashboardName.HOLDINGS.value,
+            "name": "Holdings",
+            "description": "Holding-level value, return, price, and position details.",
+        },
+        {
+            "id": DashboardName.ALLOCATION.value,
+            "name": "Allocation",
+            "description": "Portfolio allocation by type and security.",
+        },
+        {
+            "id": DashboardName.PERFORMANCE.value,
+            "name": "Performance",
+            "description": "Performance history, period returns, and benchmark comparison.",
+        },
+    ]
 
 
 def _holding_view(holding: dict[str, Any]) -> dict[str, Any]:

@@ -13,6 +13,7 @@ from my_fund_app_mcp.server import (
     DASHBOARD_RESOURCE_URI,
     DIVIDEND_CALENDAR_RESOURCE_URI,
     DividendCalendarInput,
+    DashboardName,
     HoldingSort,
     ListHoldingsInput,
     MyFundError,
@@ -107,6 +108,12 @@ class AppServerContractTests(unittest.TestCase):
         self.assertIn("ui/initialize", html)
         self.assertIn("ui/notifications/tool-result", html)
         self.assertIn("myfund_app_get_dashboard_data", html)
+        self.assertIn('data-dashboard="portfolio"', html)
+        self.assertIn('data-dashboard="holdings"', html)
+        self.assertIn('data-dashboard="allocation"', html)
+        self.assertIn('data-dashboard="performance"', html)
+        self.assertIn("Visible myFund dashboard: dashboard=", html)
+        self.assertIn("dashboard: state.activeDashboard", html)
         self.assertNotIn("https://", html)
         self.assertNotIn("http://", html)
 
@@ -127,12 +134,36 @@ class AppServerContractTests(unittest.TestCase):
 
         dashboard = payload["dashboard"]
         self.assertEqual(payload["status"]["code"], "0")
+        self.assertEqual(payload["inputs"]["dashboard"], "portfolio")
+        self.assertEqual(payload["active_dashboard"], "portfolio")
+        self.assertEqual(
+            [(item["id"], item["name"]) for item in payload["dashboards"]],
+            [
+                ("portfolio", "Portfolio"),
+                ("holdings", "Holdings"),
+                ("allocation", "Allocation"),
+                ("performance", "Performance"),
+            ],
+        )
         self.assertEqual(dashboard["holdings"][0]["name"], "Alpha")
         self.assertEqual(dashboard["allocation_by_security"][-1]["label"], "Other")
+        self.assertEqual(dashboard["views"]["holdings"]["holdings"][0]["name"], "Alpha")
+        self.assertEqual(dashboard["views"]["performance"]["benchmark_name"], "Benchmark")
         chart_ids = {item["id"] for item in dashboard["visualizations"]}
         self.assertIn("portfolio_value_history", chart_ids)
         self.assertIn("return_vs_benchmark", chart_ids)
         self.assertIn("allocation_by_security", chart_ids)
+
+    def test_dashboard_input_accepts_named_dashboard_selection(self) -> None:
+        params = DashboardInput(dashboard=DashboardName.HOLDINGS)
+
+        self.assertEqual(params.dashboard, DashboardName.HOLDINGS)
+
+        with patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_snapshot()):
+            payload = _dashboard_payload(params)
+
+        self.assertEqual(payload["inputs"]["dashboard"], "holdings")
+        self.assertEqual(payload["active_dashboard"], "holdings")
 
     def test_dividend_calendar_payload_joins_events_to_holdings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

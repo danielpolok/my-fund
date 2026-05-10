@@ -17,6 +17,7 @@ The app can visualize the chartable parts of the normalized myFund payload:
 - Largest holdings by market value and portfolio weight.
 - Top gainers and losers by profit.
 - Summary KPI tiles for value, profit, daily change, MTD return, YTD return, and holding count.
+- Named portfolio dashboard tabs: Portfolio, Holdings, Allocation, and Performance.
 - Dividend Calendar Beta payment-date view from optional user-provided JSON dividend events.
 
 Dividend Calendar Beta uses optional user-provided JSON dividend events and does not fetch or forecast dividends automatically.
