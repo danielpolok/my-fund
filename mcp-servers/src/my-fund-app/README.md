@@ -13,7 +13,7 @@ The app can visualize the chartable parts of the normalized myFund payload:
 - Portfolio value, invested capital, and profit over time.
 - Portfolio return versus the configured benchmark.
 - Benchmark delta, calculated as portfolio return minus benchmark return.
-- Allocation by asset type and by security.
+- Allocation by category and by position.
 - Largest holdings by market value and portfolio weight.
 - Top gainers and losers by profit.
 - Summary KPI tiles for value, profit, daily change, MTD return, YTD return, and holding count.

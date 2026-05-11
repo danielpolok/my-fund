@@ -569,31 +569,19 @@
     </section>
 
     <section class="dashboard-view" data-dashboard-view="allocation" hidden>
-      <div class="grid">
-        <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Allocation</h2>
-              <div class="panel-note">Largest buckets by share.</div>
-            </div>
-            <div class="chart-tabs" aria-label="Allocation mode">
-              <button type="button" data-allocation="type" class="active">Type</button>
-              <button type="button" data-allocation="security">Security</button>
-            </div>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Allocation</h2>
+            <div class="panel-note">Largest buckets by share.</div>
           </div>
-          <div class="alloc-list" id="allocation"></div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Allocation Detail</h2>
-              <div class="panel-note">Switch between asset type and security exposure.</div>
-            </div>
+          <div class="chart-tabs" aria-label="Allocation mode">
+            <button type="button" data-allocation="type" class="active">Category</button>
+            <button type="button" data-allocation="security">Position</button>
           </div>
-          <div class="alloc-list" id="allocation-detail"></div>
         </div>
-      </div>
+        <div class="alloc-list" id="allocation"></div>
+      </section>
     </section>
 
     <section class="dashboard-view" data-dashboard-view="performance" hidden>
@@ -856,7 +844,6 @@
       document.getElementById("chart").innerHTML = "";
       document.getElementById("legend").innerHTML = "";
       document.getElementById("allocation").innerHTML = '<div class="error">' + escapeHtml(message) + "</div>";
-      document.getElementById("allocation-detail").innerHTML = "";
       document.getElementById("movers").innerHTML = "";
       document.getElementById("holdings").innerHTML = "";
       document.getElementById("period-returns").innerHTML = "";
@@ -1099,7 +1086,6 @@
         '</div>';
       }).join("") : '<div class="empty">No allocation data available.</div>';
       document.getElementById("allocation").innerHTML = html;
-      document.getElementById("allocation-detail").innerHTML = html;
     }
 
     function renderMovers() {
