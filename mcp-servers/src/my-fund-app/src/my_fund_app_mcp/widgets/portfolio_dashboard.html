@@ -413,14 +413,35 @@
 
     .period-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
       padding: 12px 14px 14px;
     }
 
+    .period-options {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .period-options button {
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      padding: 0 8px;
+      cursor: pointer;
+    }
+
+    .period-options button.active {
+      color: var(--ink);
+      background: var(--soft);
+      font-weight: 650;
+    }
+
     .period-item {
       min-width: 0;
-      padding: 9px 10px;
+      padding: 14px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--soft);
@@ -433,8 +454,15 @@
 
     .period-value {
       margin-top: 4px;
-      font-size: 16px;
+      font-size: 26px;
+      line-height: 1.1;
       font-weight: 750;
+    }
+
+    .period-subvalue {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .mover-col {
@@ -589,6 +617,16 @@
         <div class="panel">
           <div class="panel-head">
             <div>
+              <h2>Period Return</h2>
+              <div class="panel-note" id="period-note">Switch between return windows and current-day profit.</div>
+            </div>
+          </div>
+          <div class="period-grid" id="period-returns"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
               <h2 id="chart-title">Performance</h2>
               <div class="panel-note" id="chart-note">Value, capital, profit, and benchmark series.</div>
             </div>
@@ -602,16 +640,6 @@
             <svg id="chart" viewBox="0 0 760 300" role="img" aria-label="Portfolio chart"></svg>
           </div>
           <div class="legend" id="legend"></div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Period Returns</h2>
-              <div class="panel-note" id="period-note">Named return windows from myFund.</div>
-            </div>
-          </div>
-          <div class="period-grid" id="period-returns"></div>
         </div>
       </section>
     </section>
@@ -759,6 +787,7 @@
       activeDashboard: "portfolio",
       chart: "value",
       allocation: "type",
+      periodMetric: "today_profit",
       busy: false
     };
 
@@ -1143,24 +1172,56 @@
 
     function renderPeriodReturns() {
       const returns = (state.data.dashboard && state.data.dashboard.period_returns) || {};
+      const latest = (state.data.dashboard && state.data.dashboard.latest) || {};
       const items = [
-        ["1W", returns["1w_pct"]],
-        ["2W", returns["2w_pct"]],
-        ["1M", returns["1m_pct"]],
-        ["3M", returns["3m_pct"]],
-        ["6M", returns["6m_pct"]],
-        ["1Y", returns["1y_pct"]],
-        ["3Y", returns["3y_pct"]],
-        ["5Y", returns["5y_pct"]],
-        ["MTD", returns["mtd_pct"]],
-        ["YTD", returns["ytd_pct"]]
+        {
+          id: "today_profit",
+          label: "Today profit",
+          value: latest.daily_change_pl,
+          text: valueText(latest.daily_change_pl),
+          subvalue: "Today return " + pctText(latest.daily_change_pct),
+          tone: latest.daily_change_pl
+        },
+        {
+          id: "today_pct",
+          label: "Today %",
+          value: latest.daily_change_pct,
+          text: pctText(latest.daily_change_pct),
+          subvalue: "Today profit " + valueText(latest.daily_change_pl),
+          tone: latest.daily_change_pct
+        },
+        { id: "mtd", label: "MTD", value: returns["mtd_pct"], text: pctText(returns["mtd_pct"]), subvalue: "Month to date return", tone: returns["mtd_pct"] },
+        { id: "ytd", label: "YTD", value: returns["ytd_pct"], text: pctText(returns["ytd_pct"]), subvalue: "Year to date return", tone: returns["ytd_pct"] },
+        { id: "1w", label: "1W", value: returns["1w_pct"], text: pctText(returns["1w_pct"]), subvalue: "One week return", tone: returns["1w_pct"] },
+        { id: "2w", label: "2W", value: returns["2w_pct"], text: pctText(returns["2w_pct"]), subvalue: "Two week return", tone: returns["2w_pct"] },
+        { id: "1m", label: "1M", value: returns["1m_pct"], text: pctText(returns["1m_pct"]), subvalue: "One month return", tone: returns["1m_pct"] },
+        { id: "3m", label: "3M", value: returns["3m_pct"], text: pctText(returns["3m_pct"]), subvalue: "Three month return", tone: returns["3m_pct"] },
+        { id: "6m", label: "6M", value: returns["6m_pct"], text: pctText(returns["6m_pct"]), subvalue: "Six month return", tone: returns["6m_pct"] },
+        { id: "1y", label: "1Y", value: returns["1y_pct"], text: pctText(returns["1y_pct"]), subvalue: "One year return", tone: returns["1y_pct"] },
+        { id: "3y", label: "3Y", value: returns["3y_pct"], text: pctText(returns["3y_pct"]), subvalue: "Three year return", tone: returns["3y_pct"] },
+        { id: "5y", label: "5Y", value: returns["5y_pct"], text: pctText(returns["5y_pct"]), subvalue: "Five year return", tone: returns["5y_pct"] }
       ];
-      document.getElementById("period-returns").innerHTML = items.map((item) => (
+      const selected = items.find((item) => item.id === state.periodMetric) || items[0];
+      document.getElementById("period-returns").innerHTML =
+        '<div class="period-options">' +
+          items.map((item) => (
+            '<button type="button" data-period-metric="' + escapeHtml(item.id) + '"' +
+              (item.id === selected.id ? ' class="active"' : "") + '>' +
+              escapeHtml(item.label) +
+            '</button>'
+          )).join("") +
+        '</div>' +
         '<div class="period-item">' +
-          '<div class="period-label">' + escapeHtml(item[0]) + '</div>' +
-          '<div class="period-value ' + signedClass(item[1]) + '">' + pctText(item[1]) + '</div>' +
-        '</div>'
-      )).join("");
+          '<div class="period-label">' + escapeHtml(selected.label) + '</div>' +
+          '<div class="period-value ' + signedClass(selected.tone) + '">' + escapeHtml(selected.text) + '</div>' +
+          '<div class="period-subvalue">' + escapeHtml(selected.subvalue) + '</div>' +
+        '</div>';
+      document.querySelectorAll("[data-period-metric]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.periodMetric = button.dataset.periodMetric;
+          renderPeriodReturns();
+        });
+      });
     }
 
     function shortDate(value) {
