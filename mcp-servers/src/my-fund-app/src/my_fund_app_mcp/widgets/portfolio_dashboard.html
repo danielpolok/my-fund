@@ -162,6 +162,34 @@
       overflow-wrap: anywhere;
     }
 
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px 14px 0;
+    }
+
+    .stat-card {
+      min-width: 0;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+    }
+
+    .stat-card .label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stat-card .value {
+      margin-top: 5px;
+      font-size: 20px;
+      line-height: 1.15;
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr);
@@ -494,7 +522,8 @@
         grid-template-columns: 1fr;
       }
       .dashboard-tabs,
-      .period-grid {
+      .period-grid,
+      .stat-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .toolbar {
@@ -512,7 +541,8 @@
       .kpis,
       .movers,
       .dashboard-tabs,
-      .period-grid {
+      .period-grid,
+      .stat-grid {
         grid-template-columns: 1fr;
       }
       .panel-head {
@@ -550,6 +580,9 @@
       <button type="button" data-dashboard="holdings">Holdings</button>
       <button type="button" data-dashboard="allocation">Allocation</button>
       <button type="button" data-dashboard="performance">Performance</button>
+      <button type="button" data-dashboard="risk">Risk</button>
+      <button type="button" data-dashboard="sectors">Sectors</button>
+      <button type="button" data-dashboard="concentration">Concentration</button>
     </nav>
 
     <section class="dashboard-view" data-dashboard-view="portfolio">
@@ -641,6 +674,43 @@
           </div>
           <div class="legend" id="legend"></div>
         </div>
+      </section>
+    </section>
+
+    <section class="dashboard-view" data-dashboard-view="risk" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Risk</h2>
+            <div class="panel-note">Exposure by myFund risk bucket.</div>
+          </div>
+        </div>
+        <div class="alloc-list" id="risk-exposure"></div>
+      </section>
+    </section>
+
+    <section class="dashboard-view" data-dashboard-view="sectors" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Sectors</h2>
+            <div class="panel-note">Exposure by holding sector.</div>
+          </div>
+        </div>
+        <div class="alloc-list" id="sector-exposure"></div>
+      </section>
+    </section>
+
+    <section class="dashboard-view" data-dashboard-view="concentration" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Concentration</h2>
+            <div class="panel-note">Largest positions and top holding concentration.</div>
+          </div>
+        </div>
+        <div class="stat-grid" id="concentration-stats"></div>
+        <div class="alloc-list" id="concentration-exposure"></div>
       </section>
     </section>
   </main>
@@ -876,6 +946,10 @@
       document.getElementById("movers").innerHTML = "";
       document.getElementById("holdings").innerHTML = "";
       document.getElementById("period-returns").innerHTML = "";
+      document.getElementById("risk-exposure").innerHTML = "";
+      document.getElementById("sector-exposure").innerHTML = "";
+      document.getElementById("concentration-stats").innerHTML = "";
+      document.getElementById("concentration-exposure").innerHTML = "";
     }
 
     function escapeHtml(value) {
@@ -901,6 +975,9 @@
       renderMovers();
       renderHoldings();
       renderPeriodReturns();
+      renderRiskExposure();
+      renderSectorExposure();
+      renderConcentration();
     }
 
     function renderHeader() {
@@ -925,7 +1002,10 @@
         { id: "portfolio", name: "Portfolio" },
         { id: "holdings", name: "Holdings" },
         { id: "allocation", name: "Allocation" },
-        { id: "performance", name: "Performance" }
+        { id: "performance", name: "Performance" },
+        { id: "risk", name: "Risk" },
+        { id: "sectors", name: "Sectors" },
+        { id: "concentration", name: "Concentration" }
       ];
       document.getElementById("dashboard-tabs").innerHTML = dashboards.map((item) => (
         '<button type="button" data-dashboard="' + escapeHtml(item.id) + '"' +
@@ -1103,8 +1183,12 @@
       });
       const key = state.allocation === "security" ? "allocation_by_security" : "allocation_by_type";
       const items = (state.data.dashboard[key] || []).filter((item) => numberOrNull(item.share_pct) !== null || numberOrNull(item.value) !== null);
+      document.getElementById("allocation").innerHTML = renderExposureBars(items, "No allocation data available.");
+    }
+
+    function renderExposureBars(items, emptyText) {
       const max = Math.max(...items.map((item) => numberOrNull(item.share_pct) || 0), 1);
-      const html = items.length ? items.map((item) => {
+      return items.length ? items.map((item) => {
         const share = numberOrNull(item.share_pct) || 0;
         const width = Math.max(1, Math.min(100, share / max * 100));
         const color = item.color || "var(--accent)";
@@ -1113,8 +1197,64 @@
           '<div class="bar-value">' + pctText(share) + '</div>' +
           '<div class="bar-track"><div class="bar-fill" style="width:' + width.toFixed(2) + '%;background:' + escapeHtml(color) + '"></div></div>' +
         '</div>';
-      }).join("") : '<div class="empty">No allocation data available.</div>';
-      document.getElementById("allocation").innerHTML = html;
+      }).join("") : '<div class="empty">' + escapeHtml(emptyText) + '</div>';
+    }
+
+    function aggregateHoldings(field, fallbackLabel) {
+      const rows = state.data.dashboard.holdings || [];
+      const buckets = new Map();
+      rows.forEach((item) => {
+        const raw = item[field];
+        const label = raw == null || raw === "" || raw === "&nbsp;" ? fallbackLabel : String(raw);
+        const existing = buckets.get(label) || { label, value: 0, share_pct: 0, profit: 0 };
+        existing.value += numberOrNull(item.value) || 0;
+        existing.share_pct += numberOrNull(item.weight_pct) || 0;
+        existing.profit += numberOrNull(item.profit) || 0;
+        buckets.set(label, existing);
+      });
+      return Array.from(buckets.values())
+        .map((item, index) => Object.assign(item, { color: paletteColor(index) }))
+        .sort((a, b) => b.share_pct - a.share_pct);
+    }
+
+    function paletteColor(index) {
+      const colors = ["var(--accent)", "var(--accent-2)", "var(--warn)", "var(--good)", "var(--bad)", "var(--neutral)"];
+      return colors[index % colors.length];
+    }
+
+    function renderRiskExposure() {
+      const items = aggregateHoldings("risk", "Unspecified risk");
+      document.getElementById("risk-exposure").innerHTML = renderExposureBars(items, "No risk bucket data available.");
+    }
+
+    function renderSectorExposure() {
+      const items = aggregateHoldings("sector", "Unspecified sector");
+      document.getElementById("sector-exposure").innerHTML = renderExposureBars(items, "No sector data available.");
+    }
+
+    function renderConcentration() {
+      const rows = (state.data.dashboard.holdings || [])
+        .slice()
+        .sort((a, b) => (numberOrNull(b.weight_pct) || 0) - (numberOrNull(a.weight_pct) || 0));
+      const topWeight = (count) => rows.slice(0, count).reduce((sum, item) => sum + (numberOrNull(item.weight_pct) || 0), 0);
+      const stats = [
+        ["Top 1", pctText(topWeight(1)), rows[0] ? rows[0].name : "n/a"],
+        ["Top 3", pctText(topWeight(3)), "Largest three positions"],
+        ["Top 5", pctText(topWeight(5)), "Largest five positions"]
+      ];
+      document.getElementById("concentration-stats").innerHTML = stats.map((item) => (
+        '<div class="stat-card">' +
+          '<div class="label">' + escapeHtml(item[0]) + '</div>' +
+          '<div class="value">' + escapeHtml(item[1]) + '</div>' +
+          '<div class="delta">' + escapeHtml(item[2]) + '</div>' +
+        '</div>'
+      )).join("");
+      const items = rows.map((item, index) => ({
+        label: item.name,
+        share_pct: numberOrNull(item.weight_pct) || 0,
+        color: paletteColor(index)
+      }));
+      document.getElementById("concentration-exposure").innerHTML = renderExposureBars(items, "No concentration data available.");
     }
 
     function renderMovers() {

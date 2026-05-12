@@ -112,6 +112,9 @@ class AppServerContractTests(unittest.TestCase):
         self.assertIn('data-dashboard="holdings"', html)
         self.assertIn('data-dashboard="allocation"', html)
         self.assertIn('data-dashboard="performance"', html)
+        self.assertIn('data-dashboard="risk"', html)
+        self.assertIn('data-dashboard="sectors"', html)
+        self.assertIn('data-dashboard="concentration"', html)
         self.assertIn("Visible myFund dashboard: dashboard=", html)
         self.assertIn("dashboard: state.activeDashboard", html)
         self.assertNotIn("https://", html)
@@ -143,12 +146,20 @@ class AppServerContractTests(unittest.TestCase):
                 ("holdings", "Holdings"),
                 ("allocation", "Allocation"),
                 ("performance", "Performance"),
+                ("risk", "Risk"),
+                ("sectors", "Sectors"),
+                ("concentration", "Concentration"),
             ],
         )
         self.assertEqual(dashboard["holdings"][0]["name"], "Alpha")
+        self.assertEqual(dashboard["holdings"][0]["risk"], "High")
+        self.assertEqual(dashboard["holdings"][0]["sector"], "Technology")
         self.assertEqual(dashboard["allocation_by_security"][-1]["label"], "Other")
         self.assertEqual(dashboard["views"]["holdings"]["holdings"][0]["name"], "Alpha")
         self.assertEqual(dashboard["views"]["performance"]["benchmark_name"], "Benchmark")
+        self.assertEqual(dashboard["views"]["risk"]["holdings"][0]["risk"], "High")
+        self.assertEqual(dashboard["views"]["sectors"]["holdings"][0]["sector"], "Technology")
+        self.assertEqual(dashboard["views"]["concentration"]["holdings"][0]["weight_pct"], 70)
         chart_ids = {item["id"] for item in dashboard["visualizations"]}
         self.assertIn("portfolio_value_history", chart_ids)
         self.assertIn("return_vs_benchmark", chart_ids)
@@ -164,6 +175,13 @@ class AppServerContractTests(unittest.TestCase):
 
         self.assertEqual(payload["inputs"]["dashboard"], "holdings")
         self.assertEqual(payload["active_dashboard"], "holdings")
+
+        risk_params = DashboardInput(dashboard=DashboardName.RISK)
+        with patch("my_fund_app_mcp.server._portfolio_snapshot", return_value=_sample_snapshot()):
+            risk_payload = _dashboard_payload(risk_params)
+
+        self.assertEqual(risk_payload["inputs"]["dashboard"], "risk")
+        self.assertEqual(risk_payload["active_dashboard"], "risk")
 
     def test_dividend_calendar_payload_joins_events_to_holdings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -365,6 +383,9 @@ def _sample_snapshot() -> dict[str, object]:
                     "udzial": 70,
                     "zysk": 90,
                     "zmiana": 12,
+                    "ryzyko": "High",
+                    "sektor": "Technology",
+                    "typ": "Stock",
                 },
                 {
                     "id": "beta",
@@ -374,6 +395,9 @@ def _sample_snapshot() -> dict[str, object]:
                     "udzial": 30,
                     "zysk": 10,
                     "zmiana": 3,
+                    "ryzyko": "Medium",
+                    "sektor": "Healthcare",
+                    "typ": "ETF",
                 },
             ],
             "top_gainers": [

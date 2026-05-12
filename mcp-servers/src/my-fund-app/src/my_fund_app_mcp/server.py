@@ -126,6 +126,9 @@ class DashboardName(str, Enum):
     HOLDINGS = "holdings"
     ALLOCATION = "allocation"
     PERFORMANCE = "performance"
+    RISK = "risk"
+    SECTORS = "sectors"
+    CONCENTRATION = "concentration"
 
 
 class PerformanceInput(PortfolioInput):
@@ -138,7 +141,10 @@ class PerformanceInput(PortfolioInput):
 class DashboardInput(PortfolioInput):
     dashboard: DashboardName = Field(
         default=DashboardName.PORTFOLIO,
-        description="Named dashboard to show: portfolio, holdings, allocation, or performance.",
+        description=(
+            "Named dashboard to show: portfolio, holdings, allocation, performance, "
+            "risk, sectors, or concentration."
+        ),
     )
     window: PerformanceWindow = Field(
         default=PerformanceWindow.FULL,
@@ -522,6 +528,15 @@ def _dashboard_payload(params: DashboardInput) -> dict[str, Any]:
                     "benchmark_name": portfolio.get("benchName"),
                     "history": history,
                 },
+                "risk": {
+                    "holdings": holdings,
+                },
+                "sectors": {
+                    "holdings": holdings,
+                },
+                "concentration": {
+                    "holdings": holdings,
+                },
             },
         },
         "analysis_boundary": {
@@ -836,6 +851,21 @@ def _dashboard_catalog() -> list[dict[str, str]]:
             "name": "Performance",
             "description": "Performance history, period returns, and benchmark comparison.",
         },
+        {
+            "id": DashboardName.RISK.value,
+            "name": "Risk",
+            "description": "Exposure by myFund risk bucket.",
+        },
+        {
+            "id": DashboardName.SECTORS.value,
+            "name": "Sectors",
+            "description": "Exposure by holding sector.",
+        },
+        {
+            "id": DashboardName.CONCENTRATION.value,
+            "name": "Concentration",
+            "description": "Top-position concentration and largest exposures.",
+        },
     ]
 
 
@@ -853,6 +883,13 @@ def _holding_view(holding: dict[str, Any]) -> dict[str, Any]:
         "purchase_price": holding.get("cenaZakupu"),
         "current_price": holding.get("close"),
         "investment_days": holding.get("okresInwestycji"),
+        "start_date": holding.get("dataInvStart"),
+        "risk": holding.get("ryzyko"),
+        "sector": holding.get("sektor"),
+        "instrument_type": holding.get("typ"),
+        "instrument_type_original": holding.get("typOrg"),
+        "account_name": holding.get("kontoInvName"),
+        "source_portfolio": holding.get("portfelOrg"),
     }
 
 
