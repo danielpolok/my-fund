@@ -123,6 +123,69 @@
       color: var(--muted);
     }
 
+    .ask-agent {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .ask-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ask-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .ask-context {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .quick-questions {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+
+    .question-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .question-input {
+      min-height: 38px;
+      max-height: 96px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.4;
+      padding: 9px 10px;
+    }
+
+    .ask-status {
+      min-height: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
     .kpis {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -160,6 +223,10 @@
       font-size: 12px;
       color: var(--muted);
       overflow-wrap: anywhere;
+    }
+
+    .kpi .ask-button {
+      margin-top: 8px;
     }
 
     .stat-grid {
@@ -366,6 +433,10 @@
       overflow: hidden;
     }
 
+    .bar-actions {
+      grid-column: 1 / -1;
+    }
+
     .bar-fill {
       height: 100%;
       width: 0;
@@ -426,6 +497,22 @@
       color: var(--ink);
       cursor: pointer;
       padding: 0 8px;
+    }
+
+    .ask-button.primary {
+      min-height: 38px;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 650;
+      padding: 0 13px;
+    }
+
+    .ask-button:disabled {
+      cursor: wait;
+      color: var(--muted);
+      background: transparent;
+      border-color: var(--line);
     }
 
     .positive { color: var(--good); }
@@ -552,6 +639,9 @@
       .segmented {
         width: 100%;
       }
+      .question-form {
+        grid-template-columns: 1fr;
+      }
       .tool-button {
         flex: 1 1 120px;
       }
@@ -584,6 +674,19 @@
       <button type="button" data-dashboard="sectors">Sectors</button>
       <button type="button" data-dashboard="concentration">Concentration</button>
     </nav>
+
+    <section class="ask-agent" aria-labelledby="ask-agent-title">
+      <div class="ask-head">
+        <div class="ask-title" id="ask-agent-title">Ask agent</div>
+        <div class="ask-context" id="ask-context">Portfolio context pending</div>
+      </div>
+      <div class="quick-questions" id="quick-questions"></div>
+      <form class="question-form" id="question-form">
+        <textarea class="question-input" id="question-input" rows="1" placeholder="Ask about this portfolio view"></textarea>
+        <button class="ask-button primary" type="submit" id="ask-submit">Ask</button>
+      </form>
+      <div class="ask-status" id="ask-status" aria-live="polite"></div>
+    </section>
 
     <section class="dashboard-view" data-dashboard-view="portfolio">
       <section class="kpis" id="kpis"></section>
@@ -668,6 +771,10 @@
               <button type="button" data-chart="return">Return</button>
               <button type="button" data-chart="delta">Delta</button>
             </div>
+            <button class="ask-button ask-context-button" type="button" id="chart-ask-button"
+              data-question="What should I learn from the selected performance chart?"
+              data-context-label="Performance chart"
+              data-context-details="Selected chart">Ask</button>
           </div>
           <div class="chart-wrap">
             <svg id="chart" viewBox="0 0 760 300" role="img" aria-label="Portfolio chart"></svg>
@@ -906,6 +1013,89 @@
       return match ? match.name : String(id || "portfolio");
     }
 
+    function activeSuggestions() {
+      const groups = (state.data && state.data.suggested_questions) || {};
+      return groups[state.activeDashboard] || groups.portfolio || [];
+    }
+
+    function setAskStatus(message) {
+      document.getElementById("ask-status").textContent = message || "";
+    }
+
+    function askButton(question, contextLabel, contextDetails) {
+      return '<button class="ask-button ask-context-button" type="button"' +
+        ' data-question="' + escapeHtml(question) + '"' +
+        ' data-context-label="' + escapeHtml(contextLabel || "") + '"' +
+        ' data-context-details="' + escapeHtml(contextDetails || "") + '">Ask</button>';
+    }
+
+    function renderAskAgentPanel() {
+      if (!state.data) return;
+      const suggestions = activeSuggestions();
+      document.getElementById("ask-context").textContent =
+        dashboardName(state.activeDashboard) + " . " + currentParams().window;
+      document.getElementById("quick-questions").innerHTML = suggestions.length ? suggestions.map((item) => (
+        '<button class="ask-button ask-context-button" type="button"' +
+          ' data-question="' + escapeHtml(item.question) + '"' +
+          ' data-context-label="' + escapeHtml("Quick question") + '"' +
+          ' data-context-details="' + escapeHtml(item.label || item.id || "") + '">' +
+          escapeHtml(item.label || item.question) +
+        '</button>'
+      )).join("") : '<div class="empty">No suggested questions for this view.</div>';
+    }
+
+    function buildAgentTask(question, context) {
+      const meta = (state.data && state.data.meta) || {};
+      const agentContext = (state.data && state.data.agent_context) || {};
+      const latest = agentContext.latest || ((state.data && state.data.dashboard && state.data.dashboard.latest) || {});
+      const lines = [
+        "Please answer this myFund portfolio question using the read-only myFund MCP tools.",
+        "Question: " + question,
+        "Dashboard context: active_dashboard=" + dashboardName(state.activeDashboard) +
+          ", window=" + currentParams().window +
+          ", selected_chart=" + state.chart +
+          ", allocation_mode=" + state.allocation +
+          ", period_metric=" + state.periodMetric + ".",
+        "Portfolio context: portfolio=" + (agentContext.portfolio || meta.portfolio || "default") +
+          ", fetched_at_utc=" + (agentContext.fetched_at_utc || meta.fetched_at_utc || "unknown") +
+          ", benchmark=" + (agentContext.benchmark_name || "none") + ".",
+        "Latest snapshot: value=" + valueText(latest.portfolio_value) +
+          ", profit=" + valueText(latest.profit) +
+          ", daily_change=" + pctText(latest.daily_change_pct) +
+          ", daily_profit=" + valueText(latest.daily_change_pl) +
+          ", MTD=" + pctText(latest.mtd_return_pct) +
+          ", YTD=" + pctText(latest.ytd_return_pct) +
+          ", holdings=" + valueText(latest.holdings_count) + "."
+      ];
+      if (context && (context.label || context.details)) {
+        lines.push("Selected context: " + (context.label || "Dashboard item") + " . " + (context.details || ""));
+      }
+      lines.push(
+        "Use tool evidence before conclusions. Do not trade, rebalance, mutate account data, or present this as investment advice."
+      );
+      return lines.join("\n");
+    }
+
+    async function sendAgentQuestion(question, context) {
+      const cleanQuestion = String(question || "").trim();
+      if (!cleanQuestion) {
+        setAskStatus("Enter a question first.");
+        return;
+      }
+      try {
+        await app.sendMessage({
+          role: "user",
+          content: [{
+            type: "text",
+            text: buildAgentTask(cleanQuestion, context || {})
+          }]
+        });
+        setAskStatus("Sent to chat.");
+      } catch (error) {
+        setAskStatus(error.message || "Could not send the question.");
+      }
+    }
+
     function extractPayload(result) {
       if (!result) return null;
       if (result.structuredContent && result.structuredContent.dashboard) return result.structuredContent;
@@ -939,6 +1129,9 @@
 
     function showError(message) {
       document.getElementById("subtitle").textContent = message;
+      document.getElementById("ask-context").textContent = "Portfolio context unavailable";
+      document.getElementById("quick-questions").innerHTML = "";
+      setAskStatus(message);
       document.getElementById("kpis").innerHTML = "";
       document.getElementById("chart").innerHTML = "";
       document.getElementById("legend").innerHTML = "";
@@ -969,6 +1162,7 @@
       renderHeader();
       renderDashboardTabs();
       renderActiveDashboard();
+      renderAskAgentPanel();
       renderKpis();
       renderChart();
       renderAllocation();
@@ -1031,22 +1225,24 @@
       state.activeDashboard = dashboardId || "portfolio";
       state.input = { params: Object.assign({}, currentParams(), { dashboard: state.activeDashboard }) };
       renderActiveDashboard();
+      renderAskAgentPanel();
       updateVisibleModelContext();
     }
 
     function renderKpis() {
       const latest = state.data.dashboard.latest || {};
       const items = [
-        ["Portfolio value", valueText(latest.portfolio_value), "Capital " + valueText(latest.invested_capital), latest.portfolio_value],
-        ["Profit", valueText(latest.profit), "Daily " + valueText(latest.daily_change_pl), latest.profit],
-        ["Daily change", pctText(latest.daily_change_pct), "MTD " + pctText(latest.mtd_return_pct), latest.daily_change_pct],
-        ["YTD return", pctText(latest.ytd_return_pct), "Holdings " + valueText(latest.holdings_count), latest.ytd_return_pct]
+        ["Portfolio value", valueText(latest.portfolio_value), "Capital " + valueText(latest.invested_capital), latest.portfolio_value, "What explains the current portfolio value and capital picture?"],
+        ["Profit", valueText(latest.profit), "Daily " + valueText(latest.daily_change_pl), latest.profit, "What is driving portfolio profit and today's profit?"],
+        ["Daily change", pctText(latest.daily_change_pct), "MTD " + pctText(latest.mtd_return_pct), latest.daily_change_pct, "What is driving today's portfolio change versus month-to-date performance?"],
+        ["YTD return", pctText(latest.ytd_return_pct), "Holdings " + valueText(latest.holdings_count), latest.ytd_return_pct, "How should I interpret year-to-date return and holding count?"]
       ];
       document.getElementById("kpis").innerHTML = items.map((item) => (
         '<div class="kpi">' +
           '<div class="label">' + escapeHtml(item[0]) + '</div>' +
           '<div class="value ' + signedClass(item[3]) + '">' + escapeHtml(item[1]) + '</div>' +
           '<div class="delta">' + escapeHtml(item[2]) + '</div>' +
+          askButton(item[4], "KPI: " + item[0], item[0] + "=" + item[1] + "; " + item[2]) +
         '</div>'
       )).join("");
     }
@@ -1056,6 +1252,10 @@
         button.classList.toggle("active", button.dataset.chart === state.chart);
       });
       const dashboard = state.data.dashboard;
+      const chartAsk = document.getElementById("chart-ask-button");
+      if (chartAsk) {
+        chartAsk.dataset.contextDetails = "chart=" + state.chart + "; window=" + currentParams().window;
+      }
       if (state.chart === "return") {
         document.getElementById("chart-title").textContent = "Return vs benchmark";
         document.getElementById("chart-note").textContent = dashboard.benchmark_name || "Configured benchmark series when present.";
@@ -1196,6 +1396,13 @@
           '<div class="bar-label">' + escapeHtml(item.label) + '</div>' +
           '<div class="bar-value">' + pctText(share) + '</div>' +
           '<div class="bar-track"><div class="bar-fill" style="width:' + width.toFixed(2) + '%;background:' + escapeHtml(color) + '"></div></div>' +
+          '<div class="bar-actions">' +
+            askButton(
+              "Explain this portfolio exposure bucket and whether it deserves attention.",
+              "Exposure: " + item.label,
+              "share=" + pctText(share) + "; value=" + valueText(item.value) + "; profit=" + valueText(item.profit)
+            ) +
+          '</div>' +
         '</div>';
       }).join("") : '<div class="empty">' + escapeHtml(emptyText) + '</div>';
     }
@@ -1247,6 +1454,11 @@
           '<div class="label">' + escapeHtml(item[0]) + '</div>' +
           '<div class="value">' + escapeHtml(item[1]) + '</div>' +
           '<div class="delta">' + escapeHtml(item[2]) + '</div>' +
+          askButton(
+            "Explain this concentration metric and what it implies.",
+            "Concentration: " + item[0],
+            item[0] + "=" + item[1] + "; " + item[2]
+          ) +
         '</div>'
       )).join("");
       const items = rows.map((item, index) => ({
@@ -1274,6 +1486,13 @@
           '<div class="bar-label">' + escapeHtml(item.name) + '</div>' +
           '<div class="bar-value ' + signedClass(value) + '">' + valueText(value) + '</div>' +
           '<div class="bar-track"><div class="bar-fill" style="width:' + width.toFixed(2) + '%;background:' + (positive ? "var(--good)" : "var(--bad)") + '"></div></div>' +
+          '<div class="bar-actions">' +
+            askButton(
+              "Explain why this holding appears in the portfolio movers.",
+              "Mover: " + item.name,
+              "profit=" + valueText(item.profit) + "; return=" + pctText(item.return_pct) + "; value=" + valueText(item.value)
+            ) +
+          '</div>' +
         '</div>';
       }).join("") : '<div class="empty">No data.</div>';
       return '<div class="mover-col"><div class="mover-title">' + escapeHtml(title) + '</div>' + content + '</div>';
@@ -1293,21 +1512,18 @@
           '<td>' + valueText(item.purchase_price) + '</td>' +
           '<td>' + valueText(item.current_price) + '</td>' +
           '<td>' + valueText(item.investment_days) + '</td>' +
-          '<td><button class="ask-button" type="button" data-holding-index="' + index + '">Ask</button></td>' +
+          '<td>' + askButton(
+            "Analyze this myFund holding from the dashboard.",
+            "Holding: " + item.name,
+            "ticker=" + (item.ticker || item.id || "n/a") +
+              "; value=" + valueText(item.value) +
+              "; weight=" + pctText(item.weight_pct) +
+              "; profit=" + valueText(item.profit) +
+              "; return=" + pctText(item.return_pct) +
+              "; daily=" + pctText(item.daily_change_pct)
+          ) + '</td>' +
         '</tr>'
       )).join("") : '<tr><td colspan="11" class="empty">No holdings data available.</td></tr>';
-      document.querySelectorAll("[data-holding-index]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const item = rows[Number(button.dataset.holdingIndex)];
-          app.sendMessage({
-            role: "user",
-            content: [{
-              type: "text",
-              text: "Analyze this myFund holding from the dashboard: " + item.name + " (" + (item.ticker || item.id || "no ticker") + ")."
-            }]
-          });
-        });
-      });
     }
 
     function renderPeriodReturns() {
@@ -1355,6 +1571,11 @@
           '<div class="period-label">' + escapeHtml(selected.label) + '</div>' +
           '<div class="period-value ' + signedClass(selected.tone) + '">' + escapeHtml(selected.text) + '</div>' +
           '<div class="period-subvalue">' + escapeHtml(selected.subvalue) + '</div>' +
+          askButton(
+            "Explain this selected return metric in the context of portfolio performance.",
+            "Return metric: " + selected.label,
+            selected.label + "=" + selected.text + "; " + selected.subvalue
+          ) +
         '</div>';
       document.querySelectorAll("[data-period-metric]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -1431,6 +1652,24 @@
       });
       document.getElementById("refresh-button").addEventListener("click", () => refreshWithWindow(currentParams().window));
       document.getElementById("expand-button").addEventListener("click", () => app.requestDisplayMode({ mode: "fullscreen" }));
+      document.getElementById("question-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const input = document.getElementById("question-input");
+        const question = input.value;
+        sendAgentQuestion(question, {
+          label: "Custom question",
+          details: "dashboard=" + dashboardName(state.activeDashboard)
+        });
+        input.value = "";
+      });
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest(".ask-context-button");
+        if (!button) return;
+        sendAgentQuestion(button.dataset.question, {
+          label: button.dataset.contextLabel,
+          details: button.dataset.contextDetails
+        });
+      });
     }
 
     function loadPreviewPayload() {

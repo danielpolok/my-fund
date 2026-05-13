@@ -17,7 +17,8 @@ The app can visualize the chartable parts of the normalized myFund payload:
 - Largest holdings by market value and portfolio weight.
 - Top gainers and losers by profit.
 - Summary KPI tiles for value, profit, daily change, MTD return, YTD return, and holding count.
-- Named portfolio dashboard tabs: Portfolio, Holdings, Allocation, and Performance.
+- Named portfolio dashboard tabs: Portfolio, Holdings, Allocation, Performance, Risk, Sectors, and Concentration.
+- App-side Ask agent controls for delegating chart, KPI, allocation, concentration, and holding questions to the host agent.
 - Dividend Calendar Beta payment-date view from optional user-provided JSON dividend events.
 
 Dividend Calendar Beta uses optional user-provided JSON dividend events and does not fetch or forecast dividends automatically.
@@ -37,7 +38,7 @@ Dividend Calendar Beta uses optional user-provided JSON dividend events and does
 
 All tools are read-only. The myFund API may cache identical requests for 5 minutes.
 
-The app also provides the `myfund_portfolio_analysis` prompt, grounded in the same read-only analysis boundary.
+The app also provides the `myfund_portfolio_analysis` prompt, grounded in the same read-only analysis boundary. Dashboard Ask controls send questions into chat; the host agent should use the MCP tools for evidence and answer outside the widget.
 
 ## Configuration
 

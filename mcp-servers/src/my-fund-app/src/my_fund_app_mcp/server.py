@@ -483,6 +483,8 @@ def _dashboard_payload(params: DashboardInput) -> dict[str, Any]:
         "summary_text": _summary_text(portfolio, derived),
         "dashboards": _dashboard_catalog(),
         "active_dashboard": params.dashboard.value,
+        "suggested_questions": _suggested_questions(),
+        "agent_context": _agent_context(snapshot, params),
         "dashboard": {
             "latest": derived["latest"],
             "period_returns": _period_returns(portfolio),
@@ -869,6 +871,155 @@ def _dashboard_catalog() -> list[dict[str, str]]:
     ]
 
 
+def _suggested_questions() -> dict[str, list[dict[str, str]]]:
+    return {
+        DashboardName.PORTFOLIO.value: [
+            {
+                "id": "portfolio_today_drivers",
+                "label": "Explain today",
+                "question": "What is driving today's portfolio result?",
+            },
+            {
+                "id": "portfolio_top_movers",
+                "label": "Review movers",
+                "question": "Which top gainers and losers matter most for the portfolio?",
+            },
+            {
+                "id": "portfolio_health",
+                "label": "Portfolio health",
+                "question": "Summarize the portfolio's current health using value, profit, returns, and holdings.",
+            },
+        ],
+        DashboardName.HOLDINGS.value: [
+            {
+                "id": "holdings_biggest_drivers",
+                "label": "Biggest drivers",
+                "question": "Which holdings are the biggest drivers of value, profit, and return?",
+            },
+            {
+                "id": "holdings_underperformers",
+                "label": "Weak holdings",
+                "question": "Which holdings look weakest based on profit, return, and daily change?",
+            },
+            {
+                "id": "holdings_position_review",
+                "label": "Position review",
+                "question": "Review the largest holdings and explain what deserves closer attention.",
+            },
+        ],
+        DashboardName.ALLOCATION.value: [
+            {
+                "id": "allocation_balance",
+                "label": "Allocation balance",
+                "question": "Is the portfolio allocation balanced by category and position?",
+            },
+            {
+                "id": "allocation_largest_buckets",
+                "label": "Largest buckets",
+                "question": "Which allocation buckets dominate the portfolio?",
+            },
+            {
+                "id": "allocation_hidden_risks",
+                "label": "Hidden risks",
+                "question": "What allocation risks or skews should I investigate?",
+            },
+        ],
+        DashboardName.PERFORMANCE.value: [
+            {
+                "id": "performance_vs_benchmark",
+                "label": "Benchmark",
+                "question": "How is the portfolio performing versus the configured benchmark?",
+            },
+            {
+                "id": "performance_trend",
+                "label": "Trend",
+                "question": "What does the value and return history say about recent performance?",
+            },
+            {
+                "id": "performance_delta",
+                "label": "Delta drivers",
+                "question": "Where does the benchmark delta look strongest or weakest?",
+            },
+        ],
+        DashboardName.RISK.value: [
+            {
+                "id": "risk_exposure",
+                "label": "Risk exposure",
+                "question": "How is portfolio exposure distributed by myFund risk bucket?",
+            },
+            {
+                "id": "risk_contributors",
+                "label": "Risk drivers",
+                "question": "Which holdings contribute most to risk exposure?",
+            },
+            {
+                "id": "risk_followups",
+                "label": "Follow-ups",
+                "question": "What risk-related follow-up questions should I ask next?",
+            },
+        ],
+        DashboardName.SECTORS.value: [
+            {
+                "id": "sector_exposure",
+                "label": "Sector exposure",
+                "question": "How is portfolio exposure distributed by sector?",
+            },
+            {
+                "id": "sector_concentration",
+                "label": "Sector concentration",
+                "question": "Which sectors dominate the portfolio and why does that matter?",
+            },
+            {
+                "id": "sector_holdings",
+                "label": "Sector holdings",
+                "question": "Which holdings explain the largest sector exposures?",
+            },
+        ],
+        DashboardName.CONCENTRATION.value: [
+            {
+                "id": "concentration_top_positions",
+                "label": "Top positions",
+                "question": "How concentrated is the portfolio in its largest positions?",
+            },
+            {
+                "id": "concentration_risk",
+                "label": "Concentration risk",
+                "question": "What concentration risks are visible from the top holdings?",
+            },
+            {
+                "id": "concentration_watchlist",
+                "label": "Watchlist",
+                "question": "Which concentrated positions should be watched most closely?",
+            },
+        ],
+    }
+
+
+def _agent_context(snapshot: dict[str, Any], params: DashboardInput) -> dict[str, Any]:
+    portfolio = snapshot["portfolio"] or {}
+    latest = snapshot["derived"]["latest"]
+    return {
+        "portfolio": snapshot["meta"].get("portfolio"),
+        "fetched_at_utc": snapshot["meta"].get("fetched_at_utc"),
+        "active_dashboard": params.dashboard.value,
+        "window": params.window.value,
+        "benchmark_name": portfolio.get("benchName"),
+        "latest": {
+            "portfolio_value": latest.get("portfolio_value"),
+            "profit": latest.get("profit"),
+            "daily_change_pct": latest.get("daily_change_pct"),
+            "daily_change_pl": latest.get("daily_change_pl"),
+            "mtd_return_pct": latest.get("mtd_return_pct"),
+            "ytd_return_pct": latest.get("ytd_return_pct"),
+            "holdings_count": latest.get("holdings_count"),
+        },
+        "read_only_boundary": (
+            "Use myFund MCP tools for evidence. Do not trade, rebalance, mutate account data, "
+            "or present dashboard values as investment advice."
+        ),
+    }
+
+
 def _holding_view(holding: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": holding.get("id"),
@@ -985,6 +1136,9 @@ def myfund_portfolio_analysis(question: str) -> str:
     """Create an analysis prompt grounded in the read-only myFund MCP app tools."""
     return (
         "Answer the user's myFund portfolio question using the myFund MCP app tools. "
+        "If the question was delegated from the dashboard widget, treat the visible dashboard, "
+        "selected chart, and provided row or metric context as orientation only; call tools for "
+        "fresh evidence before making claims. "
         "Check status.code before analysis; status.code='0' means success and '7' means portfolio not found. "
         "Use direct API facts first, distinguish computed interpretation, and mention the documented 5-minute cache "
         "when freshness matters. Use the dashboard widget when the user asks for a visual portfolio view, "

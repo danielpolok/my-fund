@@ -29,6 +29,7 @@ from my_fund_app_mcp.server import (
     myfund_get_portfolio_summary,
     myfund_list_holdings,
     myfund_dividend_calendar_beta_widget,
+    myfund_portfolio_analysis,
     myfund_portfolio_dashboard_widget,
 )
 
@@ -87,6 +88,9 @@ class AppServerContractTests(unittest.TestCase):
         prompts = {prompt.name: prompt for prompt in asyncio.run(mcp.list_prompts())}
 
         self.assertIn("myfund_portfolio_analysis", prompts)
+        prompt = myfund_portfolio_analysis("What changed?")
+        self.assertIn("delegated from the dashboard widget", prompt)
+        self.assertIn("call tools for fresh evidence", prompt)
 
     def test_dashboard_resource_is_mcp_app_html(self) -> None:
         resources = {str(resource.uri): resource for resource in asyncio.run(mcp.list_resources())}
@@ -115,8 +119,16 @@ class AppServerContractTests(unittest.TestCase):
         self.assertIn('data-dashboard="risk"', html)
         self.assertIn('data-dashboard="sectors"', html)
         self.assertIn('data-dashboard="concentration"', html)
+        self.assertIn("Ask agent", html)
+        self.assertIn('id="question-input"', html)
+        self.assertIn("ask-context-button", html)
+        self.assertIn("KPI:", html)
+        self.assertIn("Performance chart", html)
+        self.assertIn("Exposure:", html)
+        self.assertIn("Concentration:", html)
         self.assertIn("Visible myFund dashboard: dashboard=", html)
         self.assertIn("dashboard: state.activeDashboard", html)
+        self.assertIn("app.sendMessage", html)
         self.assertNotIn("https://", html)
         self.assertNotIn("http://", html)
 
@@ -151,6 +163,26 @@ class AppServerContractTests(unittest.TestCase):
                 ("concentration", "Concentration"),
             ],
         )
+        self.assertIn("suggested_questions", payload)
+        self.assertIn("agent_context", payload)
+        self.assertEqual(payload["agent_context"]["portfolio"], "sample")
+        self.assertEqual(payload["agent_context"]["active_dashboard"], "portfolio")
+        self.assertIn("read_only_boundary", payload["agent_context"])
+        self.assertEqual(
+            set(payload["suggested_questions"]),
+            {
+                "portfolio",
+                "holdings",
+                "allocation",
+                "performance",
+                "risk",
+                "sectors",
+                "concentration",
+            },
+        )
+        self.assertGreaterEqual(len(payload["suggested_questions"]["performance"]), 3)
+        self.assertIn("question", payload["suggested_questions"]["holdings"][0])
+        self.assertTrue(payload["analysis_boundary"]["read_only"])
         self.assertEqual(dashboard["holdings"][0]["name"], "Alpha")
         self.assertEqual(dashboard["holdings"][0]["risk"], "High")
         self.assertEqual(dashboard["holdings"][0]["sector"], "Technology")
